@@ -39,6 +39,9 @@ npm run test
 # Early software-paper metrics
 npm run benchmark
 
+# Tarball install/import verification from an isolated consumer app
+npm run verify:pack
+
 # Full local alpha gate
 npm run verify:alpha
 ```
@@ -51,6 +54,7 @@ npm run verify:alpha
 - `dist/worker.js`
 - `dist/pkg/*`
 - `output/benchmark/latest.json`
+- `output/pack-consumer/latest.json`
 
 ## Notes
 

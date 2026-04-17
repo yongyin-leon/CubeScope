@@ -54,17 +54,28 @@ npm run dev
 Then open [`/examples/`](http://127.0.0.1:5173/examples/) in the local Vite
 server and load the synthetic fixture under `test-data/fixtures/`.
 
+### Synthetic Fixture
+
+The repository ships a deterministic ENVI fixture for smoke tests, benchmarks,
+and reproducible screenshots:
+
+- id: `cubescope-mini-cube`
+- dimensions: `48 x 48 x 32`
+- interleave: `bsq`
+- data type: `u16`
+- byte order: `lsb`
+- generation command: `npm run fixtures:generate`
+- manifest: `test-data/fixtures/cubescope-mini-cube.json`
+
 ## SDK Usage
 
 The public API remains class-based for the alpha.
 
 ```js
-import CubeViewer from '../src/cube-viewer.js';
+import CubeViewer from '@cubescope/web';
 
 const container = document.getElementById('viewer');
-const viewer = new CubeViewer(container, {
-  workerUrl: '/src/runtime/viewer-worker.js',
-});
+const viewer = new CubeViewer(container);
 
 await viewer.init();
 
@@ -89,7 +100,9 @@ The alpha package keeps one public browser SDK, plus explicit runtime assets:
 - `@cubescope/web/pkg/envi_parser.js`
 - `@cubescope/web/pkg/envi_parser_bg.wasm`
 
-For bundlers that support asset URLs, the intended pattern is:
+When your app serves package assets alongside the ESM entry, the default
+constructor works without extra configuration. For bundlers that rewrite asset
+URLs, the intended explicit pattern is:
 
 ```js
 import CubeViewer from '@cubescope/web';
@@ -131,7 +144,7 @@ const viewer = new CubeViewer(container, options);
 - `unload(): Promise<void>`
 - `setBands({ r, g, b }): void`
 - `updateConfig(partialConfig): void`
-- `getHeader(): object | null`
+- `getHeader(): CubeHeader | null`
 - `getSpectralProfile(x, y): Promise<Float32Array | null>`
 - `destroy(): void`
 
@@ -177,6 +190,9 @@ npm run build:wasm
 
 # Build the SDK bundle, worker bundle, and runtime assets
 npm run build
+
+# Verify tarball install + import from an isolated consumer app
+npm run verify:pack
 
 # Run contract and browser smoke tests
 npm run test

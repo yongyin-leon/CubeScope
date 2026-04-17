@@ -30,7 +30,8 @@
     "test:smoke": "playwright test",
     "test": "npm run test:unit && npm run test:smoke",
     "benchmark": "node scripts/benchmark/run-benchmarks.mjs",
-    "verify:alpha": "npm run fixtures:generate && npm run build && npm run test"
+    "verify:pack": "node scripts/verify-pack-consumer.mjs",
+    "verify:alpha": "npm run fixtures:generate && npm run build && npm run test && npm run benchmark && npm run verify:pack"
   },
   "keywords": [
     "cubescope",

@@ -9,6 +9,17 @@
 import { ViewerRuntime } from './runtime/viewer-runtime.js';
 import { LoadSourceKind, normalizeLoadSource } from './sources/load-source.js';
 
+function isPackagedModuleUrl(moduleUrl) {
+    return /\/dist\/[^/]+$/.test(moduleUrl) || moduleUrl.endsWith('/cubescope.es.js');
+}
+
+function resolveRuntimeAssetUrl({ sourcePath, distPath }) {
+    return new URL(
+        isPackagedModuleUrl(import.meta.url) ? distPath : sourcePath,
+        import.meta.url
+    ).href;
+}
+
 /**
  * EN: A simple event emitter class.
  * ZH: 一个简单的事件发射器类。
@@ -75,9 +86,18 @@ class CubeViewer extends EventEmitter {
         this.#container.appendChild(this.#canvas);
 
         this.#internalViewer = new ViewerRuntime(this.#canvas, {
-            wasmJsPath: this.#options.wasmJsUrl,
-            wasmWasmPath: this.#options.wasmWasmUrl,
-            workerPath: this.#options.workerUrl,
+            wasmJsPath: this.#options.wasmJsUrl ?? resolveRuntimeAssetUrl({
+                sourcePath: './runtime/pkg/envi_parser.js',
+                distPath: './pkg/envi_parser.js',
+            }),
+            wasmWasmPath: this.#options.wasmWasmUrl ?? resolveRuntimeAssetUrl({
+                sourcePath: './runtime/pkg/envi_parser_bg.wasm',
+                distPath: './pkg/envi_parser_bg.wasm',
+            }),
+            workerPath: this.#options.workerUrl ?? resolveRuntimeAssetUrl({
+                sourcePath: './runtime/viewer-worker.js',
+                distPath: './worker.js',
+            }),
             enableBackgroundStats: this.#options.enableBackgroundStats ?? true,
             enableTilePreloading: this.#options.enableTilePreloading ?? true
         });

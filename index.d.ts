@@ -17,6 +17,19 @@ export type ViewerRuntimeConfig = {
   tilePreloading?: boolean;
 };
 
+export type CubeDataType =
+  | 'u8'
+  | 'i16'
+  | 'i32'
+  | 'f32'
+  | 'f64'
+  | 'complex-f32'
+  | 'complex-f64'
+  | 'u16'
+  | 'u32'
+  | 'i64'
+  | 'u64';
+
 export type CubeBandDisplayRole = 'red' | 'green' | 'blue' | 'nir' | 'gray' | 'other';
 
 export type CubeBandMetadata = {
@@ -38,8 +51,8 @@ export type CubeHeader = {
   lines: number;
   bands: number;
   interleave: 'bip' | 'bil' | 'bsq';
-  dataType: string;
-  byteOrder: string;
+  dataType: CubeDataType;
+  byteOrder: 'lsb' | 'msb';
   headerOffset: number;
   bytesPerPixel: number;
   description?: string;

@@ -58,6 +58,7 @@ export class ViewerRuntime extends EventEmitter {
     #metadataCache = new SourceValueCache(DEFAULT_METADATA_CACHE_POLICY);
     #statsCache = new SourceMapCache(DEFAULT_STATS_CACHE_POLICY);
     #rendererRecoveryPromise = null;
+    #resumeTransitionAfterRendererRecovery = false;
 
     // Viewport state
     #scale = 1.0;
@@ -1152,6 +1153,7 @@ export class ViewerRuntime extends EventEmitter {
         }
 
         const message = event.message ?? 'WebGPU device lost.';
+        const shouldResumeTransition = this.#isTransitioning;
         this.emit('log', `Renderer lifecycle event: ${message}`);
         this.#activeTileState.clear();
         this.#transitionTileState?.clear();
@@ -1160,6 +1162,7 @@ export class ViewerRuntime extends EventEmitter {
         this.#tileRequestQueue.clear();
         this.#preloadQueue = [];
         this.#isPreloading = false;
+        this.#resumeTransitionAfterRendererRecovery = shouldResumeTransition;
         void this.#recoverRendererAfterDeviceLoss();
     }
 
@@ -1174,12 +1177,16 @@ export class ViewerRuntime extends EventEmitter {
                 await this.#renderer.init();
                 this.emit('log', 'WebGPU renderer recovered after device loss.');
 
-                if (this.#header && this.#globalStats) {
+                if (this.#resumeTransitionAfterRendererRecovery && this.#header && this.#globalStats) {
+                    this.#resumeTransitionAfterRendererRecovery = false;
+                    this.#startTransition();
+                } else if (this.#header && this.#globalStats) {
                     requestAnimationFrame(() => this.#updateAndDraw());
                 }
             } catch (error) {
                 this.emit('error', `Renderer recovery failed: ${error.message}`);
             } finally {
+                this.#resumeTransitionAfterRendererRecovery = false;
                 this.#rendererRecoveryPromise = null;
             }
         })();

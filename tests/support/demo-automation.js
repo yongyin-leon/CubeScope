@@ -33,3 +33,15 @@ export async function triggerBandSwitch(page) {
 
     return page.evaluate(() => window.__cubescopeDemoState);
 }
+
+export async function triggerBandSwitchDirect(page, bands = { r: 31, g: 21, b: 11 }) {
+    await page.evaluate((nextBands) => {
+        window.__cubescopeDemoState?.viewer?.setBands(nextBands);
+    }, bands);
+    await page.waitForFunction(() => {
+        const state = window.__cubescopeDemoState;
+        return state?.metrics?.some((metric) => metric.name === 'bandSwitchTime');
+    }, undefined, { timeout: 60_000 });
+
+    return page.evaluate(() => window.__cubescopeDemoState);
+}

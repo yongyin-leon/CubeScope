@@ -18,6 +18,8 @@ cargo install wasm-bindgen-cli --version 0.2.100
 npm run fixtures:generate
 npm run build
 npm run test
+npm run benchmark
+npm run verify:pack
 ```
 
 ## Pull Request Expectations
@@ -26,8 +28,10 @@ Before opening a pull request:
 
 1. run `npm run build`
 2. run `npm run test`
-3. update documentation if public behavior changes
-4. include benchmark notes for any performance claim
+3. run `npm run benchmark` if the change affects loading or interaction timing
+4. run `npm run verify:pack` if the change affects packaging, runtime assets, or public entry points
+5. update documentation if public behavior changes
+6. include benchmark notes for any performance claim
 
 ## Scope Discipline
 

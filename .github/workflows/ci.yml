@@ -43,3 +43,9 @@ jobs:
 
       - name: Run tests
         run: npm run test
+
+      - name: Run benchmark smoke
+        run: npm run benchmark
+
+      - name: Verify tarball consumer install
+        run: npm run verify:pack

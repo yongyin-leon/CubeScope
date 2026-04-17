@@ -82,6 +82,16 @@ describe('CubeViewer public wrapper', () => {
         });
     });
 
+    it('resolves default runtime asset urls relative to the module', () => {
+        const container = document.createElement('div');
+        new DefaultCubeViewer(container);
+        const internal = viewerInstances.at(-1);
+
+        expect(internal.options.workerPath).toContain('/src/runtime/viewer-worker.js');
+        expect(internal.options.wasmJsPath).toContain('/src/runtime/pkg/envi_parser.js');
+        expect(internal.options.wasmWasmPath).toContain('/src/runtime/pkg/envi_parser_bg.wasm');
+    });
+
     it('keeps loadFile as a compatibility alias', async () => {
         const container = document.createElement('div');
         const viewer = new CubeViewer(container);

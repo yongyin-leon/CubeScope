@@ -22,8 +22,11 @@ let bandSwitchCount = 0;
 let spectralChart = null;
 let spectralSeries = [];
 let echartsLib = null;
+const demoQuery = new URLSearchParams(window.location.search);
+const benchmarkMode = demoQuery.get('benchmark') === '1';
 const demoState = window.__cubescopeDemoState = {
     ready: false,
+    benchmarkMode,
     viewer: null,
     header: null,
     loaded: false,
@@ -66,6 +69,9 @@ function debounce(func, delay) {
  */
 async function main() {
     log('Example starting.');
+    if (benchmarkMode) {
+        log('Benchmark mode enabled: background stats and tile preloading are disabled.');
+    }
 
     if (!viewerContainer) {
         log('[Error] Viewer container not found!');
@@ -74,7 +80,10 @@ async function main() {
 
     // EN: Initialize the CubeViewer with paths and configuration.
     // ZH: 使用路径和配置初始化 CubeViewer。
-    const viewer = new CubeViewer(viewerContainer, { workerUrl: '/src/runtime/viewer-worker.js' });
+    const viewer = new CubeViewer(viewerContainer, {
+        enableBackgroundStats: !benchmarkMode,
+        enableTilePreloading: !benchmarkMode,
+    });
     demoState.viewer = viewer;
 
     // Performance monitoring setup
