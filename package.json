@@ -1,0 +1,37 @@
+{
+  "name": "envi_parser_better",
+  "version": "1.0.0",
+  "description": "ENVI Web Viewer 是一款高性能的、基于 Web 的 ENVI (Environment for Visualizing Images) 格式高光谱和地理空间图像查看器。它利用 WebAssembly 和 Web Workers 技术，在浏览器端实现了对大型 ENVI 文件的流畅解析、渲染和分析 。",
+  "main": "dist/envi-viewer.umd.js",
+  "module": "dist/envi-viewer.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/envi-viewer.es.js",
+      "require": "./dist/envi-viewer.umd.js"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "envi",
+    "hyperspectral",
+    "gis",
+    "wasm",
+    "webgl"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "vite": "^7.1.9"
+  },
+  "files": [
+    "dist",
+    "src/lib/pkg/*",
+    "src/lib/worker.js",
+    "README.md",
+    "LICENSE"
+  ]
+}

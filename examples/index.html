@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EnviViewer.js - Library Example</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; background-color: #f0f0f0; color: #333;}
+        .controls { padding: 15px; border-bottom: 1px solid #ddd; background-color: #fff; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 10; }
+        .controls button { font-weight: bold; padding: 8px 15px; background-color: #333333; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; flex-shrink: 0; }
+        .controls button:hover { background-color: #111111; }
+        .controls button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .controls span { font-family: monospace; background-color: #e9ecef; padding: 5px 8px; border-radius: 4px; }
+        .band-selector { display: flex; gap: 5px; align-items: center; }
+        .band-selector label { font-weight: bold; }
+        .band-selector select { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+        .band-selector select:disabled { background-color: #e9ecef; }
+        #log { height: 200px; overflow-y: auto; border-top: 1px solid #ddd; padding: 10px; font-family: monospace; font-size: 12px; white-space: pre-wrap; flex-shrink: 0; background-color: #fdfdfd; }
+        #log::before { content: "--- Log ---"; display: block; padding-bottom: 5px; font-weight: bold; color: #555; }
+        #viewer-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; background-color: #000; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button id="selectFileBtn" disabled>Initializing...</button>
+        <span id="fileNameSpan">No file selected</span>
+        <span id="statusSpan" style="font-style: italic; color: #555;"></span>
+        <div class="band-selector">
+            <label for="rBandSelect" style="color: red;">R:</label>
+            <select id="rBandSelect" disabled></select>
+        </div>
+        <div class="band-selector">
+            <label for="gBandSelect" style="color: green;">G:</label>
+            <select id="gBandSelect" disabled></select>
+        </div>
+        <div class="band-selector">
+            <label for="bBandSelect" style="color: blue;">B:</label>
+            <select id="bBandSelect" disabled></select>
+        </div>
+        <button id="randomBandsBtn" disabled>Random Combination</button>
+        <span id="bandSwitchCountSpan" style="margin-left: auto;">Band Switch Count: 0</span>
+    </div>
+
+    <div class="controls">
+        <button id="toggleChartBtn" disabled>Initializing Performance Panel...</button>
+        <select id="timeRangeSelect">
+            <option value="all">All</option>
+            <option value="60">60s</option>
+            <option value="300">5m</option>
+            <option value="600">10m</option>
+        </select>
+        <button id="zoomChartBtn">Zoom</button>
+    </div>
+
+    <div id="performanceChartContainer" style="display:none; padding: 10px; background-color: #fff; border-top: 1px solid #ddd;">
+        <div id="performanceChart" style="height: 240px;"></div>
+    </div>
+
+    <div id="chartModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); justify-content: center; align-items: center;">
+        <div style="width: 80%; height: 60%; background: #fff; position: relative; padding: 10px;">
+            <button id="closeChartModal" style="position: absolute; top: 10px; right: 10px;">Close</button>
+            <div id="largeChartContainer" style="height: 100%;"></div>
+        </div>
+    </div>
+
+    <button id="toggleDebugPanelBtn" style="position: fixed; right: 12px; bottom: 12px; z-index: 1000;">Debug Panel</button>
+    <div id="debugPanel" class="hidden" style="position: fixed; right: 12px; top: 60px; width: 360px; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 999; padding: 10px;">
+        <div style="display:flex; align-items:center; justify-content: space-between; margin-bottom:8px;">
+            <strong>Debug Panel</strong>
+            <button id="closeDebugPanelBtn" style="background:#333; color:#fff; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">Close</button>
+        </div>
+        <div style="margin-bottom:8px;">
+            <label><input type="checkbox" id="enableBgStats" checked> Background Stats</label>
+            <label style="margin-left:10px;"><input type="checkbox" id="enableTilePreload" checked> Tile Preload</label>
+        </div>
+        <div id="metadataContainer" style="margin-bottom:8px;"></div>
+        <div id="performanceMetricsContainer" style="margin-bottom:8px;"></div>
+        <button id="downloadReportBtn" style="background:#333; color:#fff; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; margin-bottom:8px;">Download Report</button>
+        <div id="systemMonitorPanel"></div>
+        <div id="spectralChartContainer" style="margin-top:8px;">
+            <div style="display:flex; align-items:center; justify-content: space-between; margin-bottom:6px;">
+                <strong>Spectral Profile</strong>
+                <button id="clearSpectralBtn" style="background:#333; color:#fff; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">Clear</button>
+            </div>
+            <div id="spectralChart" style="height: 240px;"></div>
+        </div>
+    </div>
+
+    <div id="viewer-container"></div>
+    
+    <div id="log"></div>
+
+    <input type="file" id="fileInput" multiple style="display: none;">
+
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

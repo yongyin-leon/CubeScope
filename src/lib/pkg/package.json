@@ -1,0 +1,15 @@
+{
+  "name": "envi_parser",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "envi_parser_bg.wasm",
+    "envi_parser.js",
+    "envi_parser.d.ts"
+  ],
+  "main": "envi_parser.js",
+  "types": "envi_parser.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

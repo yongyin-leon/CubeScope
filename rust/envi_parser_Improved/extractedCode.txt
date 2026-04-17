@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ENVI WebGPU 浏览器 (最终修复版)</title>
+<style>
+body { font-family: Arial, sans-serif; margin:0; display:flex; flex-direction:column; height:100vh; background:transparent; }
+header { padding:10px 20px; background:#2c3e50; color:white; }
+main { flex:1; display:flex; flex-direction:column; padding:10px; overflow:hidden; }
+.controls { margin-bottom:10px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.controls button { padding:5px 10px; cursor:pointer; }
+#canvasContainer { flex:1; position:relative; border:1px solid #ccc; background:transparent; }
+canvas { width:100%; height:100%; display:block; background:transparent; }
+#canvasContainer { flex:1; position:relative; border:1px solid #ccc; background:transparent; min-height:0; } /* <-- 添加 min-height:0 */
+canvas { width:100%; height:100%; display:block; background:transparent; }
+#log { white-space:pre-wrap; border-top:1px solid #ccc; padding:10px; height:200px; overflow:auto; background:#f9f9f9; font-family: monospace; font-size: 12px; flex-shrink: 0; } /* <-- 添加 flex-shrink: 0 */
+</style>
+</head>
+<body>
+<header>
+<h1>ENVI WebGPU 浏览器 (最终修复版)</h1>
+</header>
+<main>
+<div class="controls">
+<label>选择 HDR + IMG:
+<input type="file" id="fileInput" multiple accept=".hdr,.img">
+</label>
+<label>预设组合:
+<select id="presetSelect">
+<option value="3,2,1">自然色 (3,2,1)</option>
+<option value="4,3,2">假彩色 (4,3,2)</option>
+<option value="5,4,3">近红外 (5,4,3)</option>
+<option value="7,5,3">农业 (7,5,3)</option>
+</select>
+</label>
+<label>红波段: <select id="redBand"></select></label>
+<label>绿波段: <select id="greenBand"></select></label>
+<label>蓝波段: <select id="blueBand"></select></label>
+<label id="singleBandLabel" style="display:none;">单波段: <select id="singleBand"></select></label>
+<button id="randomBtn">随机组合</button>
+<button id="toggleSingleBand">切换到单波段</button>
+<span id="pixelInfo"></span>
+</div>
+<div id="canvasContainer">
+<canvas id="gpuCanvas"></canvas>
+</div>
+<div id="log"></div>
+</main>
+<script type="module">
+import init, {
+    EnviReader,
+    normalizeBandInPlace
+} from './pkg/envi_parser.js';
+async function run() {
+    const wasm = await init();
+    log("WASM 初始化完成");
+    const fileInput = document.getElementById("fileInput");
+    const presetSelect = document.getElementById("presetSelect");
+    const redBandSelect = document.getElementById("redBand");
+    const greenBandSelect = document.getElementById("greenBand");
+    const blueBandSelect = document.getElementById("blueBand");
+    const singleBandSelect = document.getElementById("singleBand");
+    const singleBandLabel = document.getElementById("singleBandLabel");
+    const randomBtn = document.getElementById("randomBtn");
+    const toggleSingleBand = document.getElementById("toggleSingleBand");
+    const pixelInfo = document.getElementById("pixelInfo");
+    const canvas = document.getElementById("gpuCanvas");
+    const canvasContainer = document.getElementById("canvasContainer");
+    let enviReader, imgFile, width, height, numBands, header;
+    let normalizedR, normalizedG, normalizedB;
+    let isSingleBand = false;
+    let scale = 1, offsetX = 0, offsetY = 0;
+    let aspectX = 1, aspectY = 1;
+    let isDragging = false, dragStart = {x:0,y:0};
+    if (!navigator.gpu) { alert("WebGPU not supported on this browser."); return; }
+    const adapter = await navigator.gpu.requestAdapter();
+    const device = await adapter.requestDevice();
+    const context = canvas.getContext("webgpu");
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    context.configure({ device, format, alphaMode: 'premultiplied' });
+    let texture, sampler, pipeline, bindGroup;
+    const uniformBufferSize = 32;
+    const uniformBuffer = device.createBuffer({ size: uniformBufferSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    function log(msg){ const logDiv = document.getElementById("log"); logDiv.textContent = msg + "\n" + logDiv.textContent; }
+    function logDetail(title, data) { let logText = `${title}:\n${JSON.stringify(data, (k, v) => typeof v === 'bigint' ? v.toString() : v, 2)}`; const logDiv = document.getElementById("log"); logDiv.textContent = logText + "\n" + logDiv.textContent; console.log(`%c${title}`, "color:blue; font-weight:bold;", data); }
+    async function readFileAsArrayBuffer(file){ return new Promise((resolve,reject)=>{ const reader = new FileReader(); reader.onload = ()=>resolve(reader.result); reader.onerror = reject; reader.readAsArrayBuffer(file); }); }
+    function getArrayStats(arr) { if (!arr || arr.length === 0) return { min: NaN, max: NaN, avg: NaN, sum: 0, nonZero: 0 }; let min = Infinity, max = -Infinity, sum = 0, nonZero = 0; for (let i = 0; i < arr.length; i++) { const val = arr[i]; if (val < min) min = val; if (val > max) max = val; sum += val; if (val !== 0) nonZero++; } return { min, max, avg: sum / arr.length, sum, nonZero }; }
+    function updateUniforms(){ const uniformData = new Float32Array([scale, offsetX, offsetY, 0, aspectX, aspectY, 0, 0]); device.queue.writeBuffer(uniformBuffer, 0, uniformData); }
+    function draw(){ if (!pipeline) return; const commandEncoder = device.createCommandEncoder(); const textureView = context.getCurrentTexture().createView(); const pass = commandEncoder.beginRenderPass({ colorAttachments:[{ view:textureView, clearValue:{r:0,g:0,b:0,a:0}, loadOp:'clear', storeOp:'store' }] }); pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup); pass.draw(6); pass.end(); device.queue.submit([commandEncoder.finish()]); }
+    function updateAspectRatioAndDraw() { if (!width || !height) return; const canvasAspect = canvas.clientWidth / canvas.clientHeight; const imageAspect = width / height; if (imageAspect > canvasAspect) { aspectX = 1.0; aspectY = canvasAspect / imageAspect; } else { aspectX = imageAspect / canvasAspect; aspectY = 1.0; } updateUniforms(); draw(); }
+    function resetView(){ scale = 0.88; offsetX = 0; offsetY = 0; updateAspectRatioAndDraw(); }
+    function resizeCanvas(){ const dpr = window.devicePixelRatio || 1; const newWidth = canvasContainer.clientWidth * dpr; const newHeight = canvasContainer.clientHeight * dpr; if (canvas.width !== newWidth || canvas.height !== newHeight) { canvas.width = newWidth; canvas.height = newHeight; if (texture) { updateAspectRatioAndDraw(); } } }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    function updateBandsFromPreset(){ const bands = presetSelect.value.split(',').map(Number); if(bands.length===3){ redBandSelect.value = Math.min(bands[0], numBands); greenBandSelect.value = Math.min(bands[1], numBands); blueBandSelect.value = Math.min(bands[2], numBands); } }
+    function getPixelCoordsFromEvent(evt) { if (!enviReader) return {}; const rect = canvas.getBoundingClientRect(); const clipX = (evt.clientX - rect.left) / rect.width * 2 - 1; const clipY = (evt.clientY - rect.top) / rect.height * -2 + 1; const preTransformX = (clipX - offsetX) / scale; const preTransformY = (clipY - offsetY) / scale; const originalVertexX = preTransformX / aspectX; const originalVertexY = preTransformY / aspectY; const u = originalVertexX * 0.5 + 0.5; const v = originalVertexY * -0.5 + 0.5; const x = Math.floor(u * width); const y = Math.floor(v * height); return { u, v, x, y }; }
+    fileInput.addEventListener('change', async (event) => {
+        if (!event.target.files.length) return;
+        document.getElementById("log").textContent = "";
+        let hdrFileRef, imgFileRef;
+        for (let f of event.target.files) {
+            if (f.name.toLowerCase().endsWith(".hdr")) hdrFileRef = f;
+            else if (f.name.toLowerCase().endsWith(".img")) imgFileRef = f;
+        }
+        if (!hdrFileRef || !imgFileRef) { alert("请确保选择了 HDR 和 IMG 文件！"); return; }
+        imgFile = imgFileRef;
+        const hdrBytes = new Uint8Array(await readFileAsArrayBuffer(hdrFileRef));
+        try {
+            log("JS: 正在创建 EnviReader 实例...");
+            enviReader = new EnviReader(hdrBytes);
+            log("JS: EnviReader 实例创建成功。");
+            const headerObjForLog = enviReader.getHeaderAsJsObject();
+            log("ENVI Header (来自 Wasm):"); logDetail("Header Object", headerObjForLog);
+            width = enviReader.samples;
+            height = enviReader.lines;
+            numBands = enviReader.bands;
+            log(`JS: 获取属性成功: width=${width}, height=${height}, numBands=${numBands}`);
+            header = enviReader.getHeaderAsJsObject(); // 将 JS 对象存储到我们刚声明的 header 变量中
+            log("ENVI Header (来自 Wasm):"); 
+            logDetail("Header Object", header); // 像之前一样打印日志
+            // 为了代码风格统一，可以直接从这个对象获取所有属性
+            width = header.samples;
+            height = header.lines;
+            numBands = header.bands;
+        } catch (e) { log(`严重错误: 创建或使用EnviReader失败！\n${e}`); console.error(e); return; }
+        [redBandSelect, greenBandSelect, blueBandSelect, singleBandSelect].forEach(sel => {
+            sel.innerHTML = '';
+            for (let i = 1; i <= numBands; i++) { const opt = document.createElement('option'); opt.value = i; opt.text = i; sel.add(opt); }
+        });
+        presetSelect.value = "4,3,2";
+        updateBandsFromPreset();
+        await renderImage();
+    });
+    presetSelect.addEventListener('change', ()=>{ updateBandsFromPreset(); renderImage(); });
+    [redBandSelect, greenBandSelect, blueBandSelect, singleBandSelect].forEach(sel=>sel.addEventListener('change', renderImage));
+    randomBtn.onclick = ()=>{ const bands = Array.from({length:numBands},(_,i)=>i+1); for(let i=bands.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [bands[i],bands[j]]=[bands[j],bands[i]]; } redBandSelect.value=bands[0]; greenBandSelect.value=bands[1]; blueBandSelect.value=bands[2]; renderImage(); };
+    toggleSingleBand.onclick = ()=>{ isSingleBand=!isSingleBand; toggleSingleBand.textContent=isSingleBand?'切换到RGB':'切换到单波段'; singleBandLabel.style.display=isSingleBand?'inline-flex':'none'; if(isSingleBand) singleBandSelect.value=redBandSelect.value; renderImage(); };
+    canvas.addEventListener('wheel', evt=>{ evt.preventDefault(); const rect = canvas.getBoundingClientRect(); const mouseX = (evt.clientX - rect.left) / rect.width * 2 - 1; const mouseY = (evt.clientY - rect.top) / rect.height * -2 + 1; const delta = evt.deltaY < 0 ? 1.1 : 0.9; offsetX = (offsetX - mouseX) / scale * (scale * delta) + mouseX; offsetY = (offsetY - mouseY) / scale * (scale * delta) + mouseY; scale *= delta; updateUniforms(); draw(); });
+    canvas.addEventListener('mousedown', evt=>{ isDragging=true; dragStart.x=evt.clientX; dragStart.y=evt.clientY; });
+    canvas.addEventListener('mousemove', evt=>{ if(isDragging){ offsetX += 2 * (evt.clientX - dragStart.x) / canvas.width; offsetY -= 2 * (evt.clientY - dragStart.y) / canvas.height; dragStart.x = evt.clientX; dragStart.y = evt.clientY; updateUniforms(); draw(); } const { x, y } = getPixelCoordsFromEvent(evt); if (x>=0 && x<width && y>=0 && y<height) { pixelInfo.textContent = `像素 (${x}, ${y})`; } else { pixelInfo.textContent = ''; } });
+    canvas.addEventListener('mouseup', ()=>isDragging=false);
+    canvas.addEventListener('mouseleave', ()=>{ isDragging=false; pixelInfo.textContent = ''; });
+    async function renderImage(){
+        if(!enviReader || !imgFile) return;
+        log("开始渲染图像...");
+        //const interleaveEnum = enviReader.interleave;
+        const interleave = header.interleave ? header.interleave.toLowerCase() : 'unknown';
+        log(`检测到 Interleave 类型: ${interleave}`);
+        const lowPercent = 2.0; const highPercent = 98.0;
+        let rawBands;
+        console.time(`Total Band Processing (${interleave.toUpperCase()})`);
+        if (isSingleBand) {
+             const bandIdx = parseInt(singleBandSelect.value) - 1;
+             let rawData;
+            // v--v-- MODIFICATION START v--v--
+            if (interleave === 'bsq') {
+                rawData = await extractRawBandBSQ(bandIdx);
+            } else if (interleave === 'bip') {
+                rawData = await extractRawBandBIP(bandIdx); // 使用新的函数
+            } else if (interleave === 'bil') {
+                rawData = await extractRawBandBIL(bandIdx); // 使用新的函数
+            } else {
+                const msg = `错误: 单波段模式下不支持的 Interleave 类型 '${interleave}'`; 
+                log(msg); alert(msg); return;
+            }
+             if (!rawData) { log("渲染中止：单波段提取失败。"); return; }
+             rawBands = { r: rawData, g: rawData, b: rawData };
+        } else {
+            const rIdx = parseInt(redBandSelect.value) - 1;
+            const gIdx = parseInt(greenBandSelect.value) - 1;
+            const bIdx = parseInt(blueBandSelect.value) - 1;
+            // v--v-- MODIFICATION START v--v--
+            if (interleave === 'bsq') {
+                // 将原来的错误提示替换为调用新函数
+                rawBands = await extractRgbBandsBSQ(rIdx, gIdx, bIdx);
+            } else if (interleave === 'bip') {
+            // ^--^-- MODIFICATION END ^--^--
+                rawBands = await extractRawRgbBIP(rIdx, gIdx, bIdx);
+            } else if (interleave === 'bil') {
+                rawBands = await extractRawRgbBIL(rIdx, gIdx, bIdx);
+            } else { 
+                const msg = `错误: 不支持的 Interleave 类型 '${interleave}'`; 
+                log(msg); 
+                alert(msg); 
+                return; 
+            }
+        }
+        if (!rawBands) { log("渲染中止：波段数据提取失败。"); return; }
+        logDetail("原始数据统计 (归一化之前): Red Band", getArrayStats(rawBands.r));
+        logDetail("原始数据统计 (归一化之前): Green Band", getArrayStats(rawBands.g));
+        logDetail("原始数据统计 (归一化之前): Blue Band", getArrayStats(rawBands.b));
+        log("原始数据提取完成，开始并行归一化...");
+        try {
+             await Promise.all([
+                new Promise(resolve => { normalizeBandInPlace(rawBands.r, lowPercent, highPercent); resolve(); }),
+                isSingleBand ? Promise.resolve() : new Promise(resolve => { normalizeBandInPlace(rawBands.g, lowPercent, highPercent); resolve(); }),
+                isSingleBand ? Promise.resolve() : new Promise(resolve => { normalizeBandInPlace(rawBands.b, lowPercent, highPercent); resolve(); })
+            ]);
+        } catch(e) { log(`错误: Wasm 归一化时出错: ${e}`); console.error("Wasm 归一化时出错:", e); return; }
+        normalizedR = rawBands.r; normalizedG = rawBands.g; normalizedB = rawBands.b;
+        console.timeEnd(`Total Band Processing (${interleave.toUpperCase()})`);
+        await finalizeRender();
+    }
+    async function extractRawBandBSQ(bandIndex) {
+        const totalPixels_b = BigInt(enviReader.samples) * BigInt(enviReader.lines);
+        const bpp_b = BigInt(enviReader.bytesPerPixel);
+        const bytesPerBand_b = totalPixels_b * bpp_b;
+        const bandStartOffset_b = BigInt(enviReader.header_offset) + (BigInt(bandIndex) * bytesPerBand_b);
+        const dataEndOffset_b = bandStartOffset_b + bytesPerBand_b;
+        const CHUNK_SIZE_b = 4n * 1024n * 1024n;
+        const rawValueChunks = [];
+        try {
+            for (let offset = bandStartOffset_b; offset < dataEndOffset_b; offset += CHUNK_SIZE_b) {
+                const chunkStart = offset;
+                const chunkEnd = (offset + CHUNK_SIZE_b > dataEndOffset_b) ? dataEndOffset_b : offset + CHUNK_SIZE_b;
+                const chunk = new Uint8Array(await imgFile.slice(Number(chunkStart), Number(chunkEnd)).arrayBuffer());
+                if(chunk.length > 0) rawValueChunks.push(enviReader.extractRawFromBsqChunk(chunk));
+            }
+        } catch (e) { log(`错误: Wasm BSQ处理时出错: ${e}`); return null; }
+        const fullRawValues = new Float32Array(Number(totalPixels_b));
+        let position = 0;
+        for (const chunk of rawValueChunks) { fullRawValues.set(chunk, position); position += chunk.length; }
+        return fullRawValues;
+    }
+    async function extractRgbBandsBSQ(rIdx, gIdx, bIdx) {
+        log(`[BSQ] ----------------- 开始BSQ提取 (RGB) -----------------`);
+        log(`[BSQ] 并行提取波段: R=${rIdx+1}, G=${gIdx+1}, B=${bIdx+1}`);
+        try {
+            // 使用 Promise.all 来并行执行三个波段的提取任务，这样更快
+            const [r, g, b] = await Promise.all([
+                extractRawBandBSQ(rIdx),
+                extractRawBandBSQ(gIdx),
+                extractRawBandBSQ(bIdx)
+            ]);
+            // 检查是否有任何一个波段提取失败
+            if (!r || !g || !b) {
+                log("错误: BSQ RGB波段提取过程中至少有一个波段失败。");
+                return null;
+            }
+            log("[BSQ] 所有RGB波段提取成功。");
+            return { r, g, b };
+        } catch (e) {
+            log(`严重错误: 在 BSQ RGB 波段提取期间发生异常: ${e}`);
+            return null;
+        }
+    }
+    async function extractRawRgbBIP(rIdx, gIdx, bIdx) {
+        log(`[BIP] ----------------- 开始BIP提取 -----------------`);
+        const totalPixels_b = BigInt(enviReader.samples) * BigInt(enviReader.lines);
+        const bpp_b = BigInt(enviReader.bytesPerPixel);
+        const bands_b = BigInt(enviReader.bands);
+        const bpf_b = bpp_b * bands_b;
+        const dataStartOffset_b = BigInt(enviReader.header_offset);
+        const dataTotalBytes_b = totalPixels_b * bpf_b;
+        const dataEndOffset_b = dataStartOffset_b + dataTotalBytes_b;
+        logDetail("[BIP] BigInt 计算参数", { totalPixels_b, bpf_b, dataTotalBytes_b });
+        logDetail("[BIP] 文件读取范围", { dataStartOffset_b, dataEndOffset_b, fileSize: imgFile.size });
+        const totalPixels = Number(totalPixels_b);
+        let r = new Float32Array(totalPixels), g = new Float32Array(totalPixels), b = new Float32Array(totalPixels);
+        let position = 0;
+        const CHUNK_SIZE_b = 4n * 1024n * 1024n;
+        const alignedChunkSize_b = (bpf_b > 0n) ? (CHUNK_SIZE_b / bpf_b) * bpf_b : 0n;
+        logDetail("[BIP] 分块参数", { alignedChunkSize_b });
+        if (alignedChunkSize_b === 0n) {
+            log(`!!!! [BIP] alignedChunkSize 为 0, 尝试一次性读取...`);
+            if (dataTotalBytes_b > 0) {
+                 const chunk = new Uint8Array(await imgFile.slice(Number(dataStartOffset_b), Number(dataEndOffset_b)).arrayBuffer());
+                 const rgbChunk = enviReader.extractRawRgbFromBipChunk(chunk, rIdx, gIdx, bIdx);
+                 r.set(rgbChunk.r); g.set(rgbChunk.g); b.set(rgbChunk.b);
+                 position = rgbChunk.r.length;
+            }
+        } else {
+            let chunkCount = 0;
+            try {
+                for (let offset = dataStartOffset_b; offset < dataEndOffset_b; offset += alignedChunkSize_b) {
+                    chunkCount++;
+                    const chunkStart = offset;
+                    const chunkEnd = (offset + alignedChunkSize_b > dataEndOffset_b) ? dataEndOffset_b : offset + alignedChunkSize_b;
+                    if (chunkStart >= chunkEnd) continue;
+                    const chunk = new Uint8Array(await imgFile.slice(Number(chunkStart), Number(chunkEnd)).arrayBuffer());
+                    if (chunk.length === 0) continue;
+                    const rgbChunk = enviReader.extractRawRgbFromBipChunk(chunk, rIdx, gIdx, bIdx);
+                    r.set(rgbChunk.r, position); g.set(rgbChunk.g, position); b.set(rgbChunk.b, position);
+                    position += rgbChunk.r.length;
+                }
+            } catch (e) { log(`错误: Wasm BIP处理时出错 (在第 ${chunkCount} 块): ${e}`); return null; }
+            log(`[BIP] 提取完成. 总共处理了 ${chunkCount} 个块。`);
+        }
+        log(`[BIP] 最终填充的像素数: ${position} / 预期总像素数: ${totalPixels}`);
+        if (position !== totalPixels) { log(`!!!! [BIP] 警告: 最终像素数不匹配!`); }
+        return { r, g, b };
+    }
+    async function extractRawRgbBIL(rIdx, gIdx, bIdx) {
+        log(`[BIL] ----------------- 开始BIL提取 -----------------`);
+        const totalPixels_b = BigInt(enviReader.samples) * BigInt(enviReader.lines);
+        const samples_b = BigInt(enviReader.samples);
+        const lines_b = BigInt(enviReader.lines);
+        const bpp_b = BigInt(enviReader.bytesPerPixel);
+        const bands_b = BigInt(enviReader.bands);
+        const bpl_b = bpp_b * samples_b;
+        const bfl_b = bpl_b * bands_b;
+        const dataStartOffset_b = BigInt(enviReader.header_offset);
+        const dataTotalBytes_b = lines_b * bfl_b;
+        const dataEndOffset_b = dataStartOffset_b + dataTotalBytes_b;
+        logDetail("[BIL] BigInt 计算参数", { totalPixels_b, bfl_b, dataTotalBytes_b });
+        logDetail("[BIL] 文件读取范围", { dataStartOffset_b, dataEndOffset_b, fileSize: imgFile.size });
+        const totalPixels = Number(totalPixels_b);
+        let r = new Float32Array(totalPixels), g = new Float32Array(totalPixels), b = new Float32Array(totalPixels);
+        let position = 0;
+        const CHUNK_SIZE_LINES_b = 64n;
+        const alignedChunkSize_b = (bfl_b > 0n) ? CHUNK_SIZE_LINES_b * bfl_b : 0n;
+        logDetail("[BIL] 分块参数", { alignedChunkSize_b });
+        if (alignedChunkSize_b === 0n) {
+             log(`!!!! [BIL] alignedChunkSize 为 0, 尝试一次性读取...`);
+             if (dataTotalBytes_b > 0) {
+                const chunk = new Uint8Array(await imgFile.slice(Number(dataStartOffset_b), Number(dataEndOffset_b)).arrayBuffer());
+                const rgbChunk = enviReader.extractRawRgbFromBilChunk(chunk, rIdx, gIdx, bIdx);
+                r.set(rgbChunk.r); g.set(rgbChunk.g); b.set(rgbChunk.b);
+                position = rgbChunk.r.length;
+             }
+        } else {
+            let chunkCount = 0;
+            try {
+                for (let offset = dataStartOffset_b; offset < dataEndOffset_b; offset += alignedChunkSize_b) {
+                    chunkCount++;
+                    const chunkStart = offset;
+                    const chunkEnd = (offset + alignedChunkSize_b > dataEndOffset_b) ? dataEndOffset_b : offset + alignedChunkSize_b;
+                    if (chunkStart >= chunkEnd) continue;
+                    const chunk = new Uint8Array(await imgFile.slice(Number(chunkStart), Number(chunkEnd)).arrayBuffer());
+                    if (chunk.length === 0) continue;
+                    const rgbChunk = enviReader.extractRawRgbFromBilChunk(chunk, rIdx, gIdx, bIdx);
+                    r.set(rgbChunk.r, position); g.set(rgbChunk.g, position); b.set(rgbChunk.b, position);
+                    position += rgbChunk.r.length;
+                }
+            } catch (e) { log(`错误: Wasm BIL处理时出错 (在第 ${chunkCount} 块): ${e}`); return null; }
+            log(`[BIL] 提取完成. 总共处理了 ${chunkCount} 个块。`);
+        }
+        log(`[BIL] 最终填充的像素数: ${position} / 预期总像素数: ${totalPixels}`);
+        if (position !== totalPixels) { log(`!!!! [BIL] 警告: 最终像素数不匹配!`); }
+        return { r, g, b };
+    }
+    async function finalizeRender() {
+        log("所有波段处理完毕，准备上传到 GPU...");
+        const pixels = new Uint8Array(width * height * 4);
+        for(let i = 0; i < width * height; i++){
+            pixels[i*4]   = Math.round(normalizedR[i] * 255);
+            pixels[i*4+1] = Math.round(normalizedG[i] * 255);
+            pixels[i*4+2] = Math.round(normalizedB[i] * 255);
+            pixels[i*4+3] = 255;
+        }
+        if(texture) texture.destroy();
+        texture = device.createTexture({ size: [width, height, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+        device.queue.writeTexture({ texture }, pixels, { bytesPerRow: width*4 }, [width, height, 1]);
+        if(!sampler){ sampler = device.createSampler({ magFilter:'linear', minFilter:'linear' }); }
+        if(!pipeline){
+            const shaderModule = device.createShaderModule({ code: `
+                struct Uniforms { transform: vec4<f32>, aspect: vec2<f32>, }; struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, };
+                @group(0) @binding(0) var myTexture: texture_2d<f32>; @group(0) @binding(1) var mySampler: sampler; @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+                @vertex fn vs(@builtin(vertex_index) idx: u32) -> VertexOutput { var pos = array<vec2<f32>,6>(vec2<f32>(-1.0,-1.0), vec2<f32>(1.0,-1.0), vec2<f32>(-1.0,1.0), vec2<f32>(-1.0,1.0), vec2<f32>(1.0,-1.0), vec2<f32>(1.0,1.0)); var output: VertexOutput; let aspect_pos = pos[idx] * uniforms.aspect; output.position = vec4<f32>(aspect_pos.x * uniforms.transform.x + uniforms.transform.y, aspect_pos.y * uniforms.transform.x + uniforms.transform.z, 0.0, 1.0); output.uv = vec2<f32>(pos[idx].x * 0.5 + 0.5, pos[idx].y * -0.5 + 0.5); return output; }
+                @fragment fn fs(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> { return textureSample(myTexture, mySampler, uv); }`
+            });
+            pipeline=device.createRenderPipeline({ layout:'auto', vertex:{ module:shaderModule, entryPoint:'vs' }, fragment:{ module:shaderModule, entryPoint:'fs', targets:[{format}] }, primitive:{ topology:'triangle-list' } });
+        }
+        bindGroup = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries:[ {binding:0, resource: texture.createView()}, {binding:1, resource: sampler}, {binding:2, resource: { buffer: uniformBuffer }} ] });
+        log("GPU 资源准备就绪，首次绘制。");
+        resetView();
+    }
+    canvas.addEventListener('click', evt=>{
+        if(!enviReader || !imgFile || !normalizedR) return;
+        const { x, y } = getPixelCoordsFromEvent(evt);
+        if(x < 0 || x >= width || y < 0 || y >= height) return;
+        const index = y * width + x;
+        const normText = `归一化 R=${normalizedR[index].toFixed(3)}, G=${normalizedG[index].toFixed(3)}, B=${normalizedB[index].toFixed(3)}`;
+        pixelInfo.textContent = `像素 (${x}, ${y}) | ${normText}`;
+    });
+}
+run();
+</script>
+</body> 
+</html>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f4f7f9;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+}
+.container {
+    width: 100%;
+    max-width: 800px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+}
+h1 {
+    text-align: center;
+    color: #1a2b4d;
+    margin-bottom: 25px;
+}
+button {
+    display: block;
+    width: 100%;
+    padding: 12px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #fff;
+    background-color: #007bff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+}
+button:hover {
+    background-color: #0056b3;
+}
+#output {
+    margin-top: 25px;
+    padding: 20px;
+    background-color: #e9ecef;
+    border-radius: 5px;
+    font-family: "SF Mono", "Consolas", "Courier New", monospace;
+    font-size: 14px;
+    white-space: pre-wrap; 
+    word-wrap: break-word; 
+    color: #495057;
+    min-height: 100px;
+    border: 1px solid #dee2e6;
+}
+#hdrFileInput {
+    display: none;
+}
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+    align-items: center;
+}
+.controls button { width: auto; }
+.band-selector { display: flex; align-items: center; gap: 5px; }
+.band-selector input { width: 50px; }
+canvas {
+    width: 100%;
+    height: 500px;
+    background-color: #111;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    cursor: grab;
+}
+canvas:active { cursor: grabbing; }
+use thiserror::Error;
+use wasm_bindgen::prelude::*;
+#[derive(Error, Debug)]
+pub enum EnviError {
+    #[error("输入数据不是有效的UTF-8编码: {0}")]
+    InvalidUtf8(#[from] std::str::Utf8Error),
+    #[error("缺少必需的头文件字段: '{0}'")]
+    MissingRequiredField(String),
+    #[error("字段 '{field}' 的值无效: '{value}'")]
+    InvalidFieldValue { field: String, value: String },
+    #[error("不支持的数据类型代码: {0}")]
+    UnsupportedDataType(i32),
+    #[error("不支持的字节序代码: {0}")]
+    UnsupportedByteOrder(i32),
+    #[error("无效的字节序值: {0}")]
+    InvalidByteOrder(i32),
+    #[error("不支持的交错类型: `{0}`")]
+    UnsupportedInterleave(String),
+    #[error("多行值（使用 '{{' 和 '}}'）未正确关闭")]
+    UnclosedMultilineValue,
+    #[error("无法解析字段 '{field}' 的值: {source}")]
+    ParseError {
+        field: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+}
+impl EnviError {
+    pub fn from_parse_error<E>(source: E, field: &str) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        EnviError::ParseError {
+            field: field.to_string(),
+            source: Box::new(source),
+        }
+    }
+}
+impl From<EnviError> for JsValue {
+    fn from(err: EnviError) -> JsValue {
+        JsValue::from_str(&err.to_string())
+    }
+}
+use crate::error::EnviError;
+use crate::header::{ByteOrder, DataType, EnviHeader, Interleave};
+use std::collections::HashMap;
+use std::str::FromStr;
+pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
+    let mut fields: HashMap<String, String> = HashMap::new();
+    let mut current_key = String::new();
+    let mut multiline_buffer = String::new();
+    let mut in_multiline = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
+        if in_multiline {
+            if let Some(end_pos) = line.rfind('}') {
+                multiline_buffer.push_str(&line[..end_pos]);
+                fields.insert(current_key.clone(), multiline_buffer.trim().to_string());
+                in_multiline = false;
+                multiline_buffer.clear();
+            } else {
+                multiline_buffer.push_str(line);
+                multiline_buffer.push(' ');
+            }
+        } else if let Some((key, value)) = line.split_once('=') {
+            let key = key.trim().to_string();
+            let value = value.trim();
+            if value.starts_with('{') {
+                if let Some(end_pos) = value.rfind('}') {
+                    fields.insert(key, value[1..end_pos].trim().to_string());
+                } else {
+                    in_multiline = true;
+                    current_key = key;
+                    multiline_buffer.push_str(&value[1..]);
+                    multiline_buffer.push(' ');
+                }
+            } else {
+                fields.insert(key, value.to_string());
+            }
+        }
+    }
+    if in_multiline {
+        return Err(EnviError::UnclosedMultilineValue);
+    }
+    let mut processed_fields = fields;
+    let mut get_and_remove_required_field = |key: &str| {
+        processed_fields
+            .remove(key)
+            .ok_or_else(|| EnviError::MissingRequiredField(key.to_string()))
+    };
+    let get_optional_field = |fields: &mut HashMap<String, String>, key: &str, default: &str| {
+        fields.remove(key).unwrap_or_else(|| default.to_string())
+    };
+    let samples: u32 = get_and_remove_required_field("samples")?.parse().map_err(|e| EnviError::from_parse_error(e, "samples"))?;
+    let lines: u32 = get_and_remove_required_field("lines")?.parse().map_err(|e| EnviError::from_parse_error(e, "lines"))?;
+    let bands: u32 = get_and_remove_required_field("bands")?.parse().map_err(|e| EnviError::from_parse_error(e, "bands"))?;
+    let data_type_code: i32 = get_and_remove_required_field("data type")?.parse().map_err(|e| EnviError::from_parse_error(e, "data type"))?;
+    let data_type = DataType::from_code(data_type_code)?;
+    let interleave_str = get_and_remove_required_field("interleave")?;
+    let interleave = Interleave::from_str(&interleave_str)?;
+    let byte_order_code: i32 = get_optional_field(&mut processed_fields, "byte order", "0").parse().map_err(|e| EnviError::from_parse_error(e, "byte order"))?;
+    let byte_order = ByteOrder::from_code(byte_order_code)?;
+    let header_offset: usize = get_optional_field(&mut processed_fields, "header offset", "0").parse().map_err(|e| EnviError::from_parse_error(e, "header offset"))?;
+    let description = processed_fields.remove("description");
+    let file_type = processed_fields.remove("file type");
+    let sensor_type = processed_fields.remove("sensor type");
+    let wavelength = processed_fields.remove("wavelength").and_then(|s| {
+        s.split(',')
+         .map(|v| v.trim().parse::<f64>())
+         .collect::<Result<Vec<f64>, _>>()
+         .ok()
+    });
+    let custom_fields = processed_fields; 
+    let bytes_per_pixel = data_type.byte_size();
+    Ok(EnviHeader {
+        samples,
+        lines,
+        bands,
+        data_type,
+        interleave,
+        byte_order,
+        header_offset,
+        description,
+        file_type,
+        sensor_type,
+        wavelength,
+        custom_fields,
+        bytes_per_pixel,
+    })
+}
+mod error;
+mod header;
+mod parser;
+use wasm_bindgen::prelude::*;
+use crate::header::{ByteOrder, DataType, EnviHeader, Interleave};
+use js_sys::{Float32Array, Object, Reflect};
+#[macro_export]
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+#[wasm_bindgen(start)]
+pub fn start() {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+}
+#[wasm_bindgen]
+pub struct EnviReader {
+    header: EnviHeader,
+}
+#[wasm_bindgen]
+impl EnviReader {
+    #[wasm_bindgen(constructor)]
+    pub fn new(header_content: &[u8]) -> Result<EnviReader, JsValue> {
+        log!("WASM: EnviReader::new() - 開始解析ENVI頭文件...");
+        let content = std::str::from_utf8(header_content)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let header = parser::parse_header_str(content)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        log!("WASM: 頭文件解析成功!");
+        Ok(EnviReader { header })
+    }
+    #[wasm_bindgen(getter)]
+    pub fn samples(&self) -> u32 { self.header.samples }
+    #[wasm_bindgen(getter)]
+    pub fn lines(&self) -> u32 { self.header.lines }
+    #[wasm_bindgen(getter)]
+    pub fn bands(&self) -> u32 { self.header.bands }
+    #[wasm_bindgen(getter)]
+    pub fn header_offset(&self) -> usize { self.header.header_offset }
+    #[wasm_bindgen(getter, js_name = bytesPerPixel)]
+    pub fn bytes_per_pixel(&self) -> usize { self.header.bytes_per_pixel }
+    #[wasm_bindgen(getter)]
+    pub fn interleave(&self) -> Interleave { self.header.interleave }
+    #[wasm_bindgen(js_name = getHeaderAsJsObject)]
+    pub fn get_header_as_js_object(&self) -> Result<JsValue, JsValue> {
+        self.header.to_js()
+    }
+    #[wasm_bindgen(js_name = extractRawFromBsqChunk)]
+    pub fn extract_raw_from_bsq_chunk(&self, chunk_data: &[u8]) -> Result<Float32Array, JsValue> {
+        let bpp = self.header.bytes_per_pixel;
+        if bpp == 0 || chunk_data.len() % bpp != 0 { return Err(JsValue::from_str("Invalid chunk size for BSQ data.")); }
+        let num_pixels = chunk_data.len() / bpp;
+        let mut out = Vec::<f32>::with_capacity(num_pixels);
+        for i in 0..num_pixels {
+            let pixel_bytes = &chunk_data[i * bpp..(i + 1) * bpp];
+            out.push(self.bytes_to_f32(pixel_bytes)?);
+        }
+        Ok(Float32Array::from(out.as_slice()))
+    }
+    #[wasm_bindgen(js_name = extractRawRgbFromBipChunk)]
+    pub fn extract_raw_rgb_from_bip_chunk(&self, chunk_data: &[u8], r_idx: usize, g_idx: usize, b_idx: usize) -> Result<Object, JsValue> {
+        let bpp = self.header.bytes_per_pixel;
+        let bands = self.header.bands as usize;
+        let bytes_per_full_pixel = bpp * bands;
+        if bytes_per_full_pixel == 0 || chunk_data.len() % bytes_per_full_pixel != 0 { return Err(JsValue::from_str(&format!("Invalid chunk size {} for BIP data. bpf={}", chunk_data.len(), bytes_per_full_pixel))); }
+        let num_pixels = chunk_data.len() / bytes_per_full_pixel;
+        let mut r_out = Vec::with_capacity(num_pixels);
+        let mut g_out = Vec::with_capacity(num_pixels);
+        let mut b_out = Vec::with_capacity(num_pixels);
+        for i in 0..num_pixels {
+            let pixel_start = i * bytes_per_full_pixel;
+            r_out.push(self.bytes_to_f32(&chunk_data[pixel_start + r_idx*bpp .. pixel_start + (r_idx+1)*bpp])?);
+            g_out.push(self.bytes_to_f32(&chunk_data[pixel_start + g_idx*bpp .. pixel_start + (g_idx+1)*bpp])?);
+            b_out.push(self.bytes_to_f32(&chunk_data[pixel_start + b_idx*bpp .. pixel_start + (b_idx+1)*bpp])?);
+        }
+        self.create_rgb_js_object(r_out, g_out, b_out)
+    }
+    #[wasm_bindgen(js_name = extractRawRgbFromBilChunk)]
+    pub fn extract_raw_rgb_from_bil_chunk(&self, chunk_data: &[u8], r_idx: usize, g_idx: usize, b_idx: usize) -> Result<Object, JsValue> {
+        let bpp = self.header.bytes_per_pixel;
+        let samples = self.header.samples as usize;
+        let bands = self.header.bands as usize;
+        let bytes_per_line_one_band = bpp * samples;
+        let bytes_per_full_line = bytes_per_line_one_band * bands;
+        if bytes_per_full_line == 0 || chunk_data.len() % bytes_per_full_line != 0 { return Err(JsValue::from_str("Invalid chunk size for BIL data. Must be full lines.")); }
+        let num_lines = chunk_data.len() / bytes_per_full_line;
+        let num_pixels = num_lines * samples;
+        let mut r_out = Vec::with_capacity(num_pixels);
+        let mut g_out = Vec::with_capacity(num_pixels);
+        let mut b_out = Vec::with_capacity(num_pixels);
+        for line_idx in 0..num_lines {
+            let current_line_start = line_idx * bytes_per_full_line;
+            let r_band_start_in_line = current_line_start + r_idx * bytes_per_line_one_band;
+            let g_band_start_in_line = current_line_start + g_idx * bytes_per_line_one_band;
+            let b_band_start_in_line = current_line_start + b_idx * bytes_per_line_one_band;
+            for sample_idx in 0..samples {
+                let pixel_offset = sample_idx * bpp;
+                r_out.push(self.bytes_to_f32(&chunk_data[r_band_start_in_line + pixel_offset .. r_band_start_in_line + pixel_offset + bpp])?);
+                g_out.push(self.bytes_to_f32(&chunk_data[g_band_start_in_line + pixel_offset .. g_band_start_in_line + pixel_offset + bpp])?);
+                b_out.push(self.bytes_to_f32(&chunk_data[b_band_start_in_line + pixel_offset .. b_band_start_in_line + pixel_offset + bpp])?);
+            }
+        }
+        self.create_rgb_js_object(r_out, g_out, b_out)
+    }
+    fn bytes_to_f32(&self, bytes: &[u8]) -> Result<f32, JsValue> {
+        let is_le = self.header.byte_order == ByteOrder::Lsb;
+        macro_rules! from_bytes { ($T:ty, $f_le:ident, $f_be:ident) => { { let b: [u8; std::mem::size_of::<$T>()] = bytes.try_into().map_err(|_| JsValue::from_str("Slice to array failed"))?; if is_le { <$T>::$f_le(b) as f32 } else { <$T>::$f_be(b) as f32 } } } }
+        Ok(match self.header.data_type {
+            DataType::U8 => bytes[0] as f32,
+            DataType::I16 => from_bytes!(i16, from_le_bytes, from_be_bytes),
+            DataType::U16 => from_bytes!(u16, from_le_bytes, from_be_bytes),
+            DataType::I32 => from_bytes!(i32, from_le_bytes, from_be_bytes),
+            DataType::U32 => from_bytes!(u32, from_le_bytes, from_be_bytes),
+            DataType::F32 => { let b: [u8; 4] = bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 4] failed for F32"))?; if is_le { f32::from_le_bytes(b) } else { f32::from_be_bytes(b) } },
+            DataType::I64 => from_bytes!(i64, from_le_bytes, from_be_bytes),
+            DataType::U64 => from_bytes!(u64, from_le_bytes, from_be_bytes),
+            DataType::F64 => from_bytes!(f64, from_le_bytes, from_be_bytes),
+            _ => return Err(JsValue::from_str("Complex data types are not supported for raw extraction.")),
+        })
+    }
+    fn create_rgb_js_object(&self, r: Vec<f32>, g: Vec<f32>, b: Vec<f32>) -> Result<Object, JsValue> {
+        let obj = Object::new();
+        Reflect::set(&obj, &"r".into(), &Float32Array::from(r.as_slice()))?;
+        Reflect::set(&obj, &"g".into(), &Float32Array::from(g.as_slice()))?;
+        Reflect::set(&obj, &"b".into(), &Float32Array::from(b.as_slice()))?;
+        Ok(obj)
+    }
+    #[wasm_bindgen(js_name = extractRawBandFromBipChunk)]
+    pub fn extract_raw_band_from_bip_chunk(&self, chunk_data: &[u8], band_idx: usize) -> Result<Float32Array, JsValue> {
+        let bpp = self.header.bytes_per_pixel;
+        let bands = self.header.bands as usize;
+        let bytes_per_full_pixel = bpp * bands;
+        if bytes_per_full_pixel == 0 || chunk_data.len() % bytes_per_full_pixel != 0 {
+            return Err(JsValue::from_str("Invalid chunk size for BIP data."));
+        }
+        let num_pixels = chunk_data.len() / bytes_per_full_pixel;
+        let mut out = Vec::with_capacity(num_pixels);
+        for i in 0..num_pixels {
+            let pixel_start = i * bytes_per_full_pixel;
+            let band_start = pixel_start + band_idx * bpp;
+            out.push(self.bytes_to_f32(&chunk_data[band_start .. band_start + bpp])?);
+        }
+        Ok(Float32Array::from(out.as_slice()))
+    }
+    #[wasm_bindgen(js_name = extractRawBandFromBilChunk)]
+    pub fn extract_raw_band_from_bil_chunk(&self, chunk_data: &[u8], band_idx: usize) -> Result<Float32Array, JsValue> {
+        let bpp = self.header.bytes_per_pixel;
+        let samples = self.header.samples as usize;
+        let bands = self.header.bands as usize;
+        let bytes_per_line_one_band = bpp * samples;
+        let bytes_per_full_line = bytes_per_line_one_band * bands;
+        if bytes_per_full_line == 0 || chunk_data.len() % bytes_per_full_line != 0 {
+            return Err(JsValue::from_str("Invalid chunk size for BIL data."));
+        }
+        let num_lines = chunk_data.len() / bytes_per_full_line;
+        let num_pixels = num_lines * samples;
+        let mut out = Vec::with_capacity(num_pixels);
+        for line_idx in 0..num_lines {
+            let current_line_start = line_idx * bytes_per_full_line;
+            let band_start_in_line = current_line_start + band_idx * bytes_per_line_one_band;
+            for sample_idx in 0..samples {
+                let pixel_offset = sample_idx * bpp;
+                let start = band_start_in_line + pixel_offset;
+                out.push(self.bytes_to_f32(&chunk_data[start .. start + bpp])?);
+            }
+        }
+        Ok(Float32Array::from(out.as_slice()))
+    }
+}
+#[wasm_bindgen(js_name = normalizeBandInPlace)]
+pub fn normalize_band_in_place(data: &mut [f32], low_percent: f32, high_percent: f32) -> Result<(), JsValue> {
+    if data.is_empty() { return Ok(()); }
+    let mut sorted = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = sorted.len();
+    let p_low_idx = ((n as f32) * (low_percent / 100.0)).floor() as usize;
+    let p_high_idx = ((n as f32) * (high_percent / 100.0)).ceil() as usize;
+    let min_val = sorted[p_low_idx.min(n - 1)];
+    let max_val = sorted[p_high_idx.min(n - 1)];
+    let range = (max_val - min_val).max(1e-9);
+    for raw_value in data.iter_mut() {
+        *raw_value = ((*raw_value - min_val) / range).clamp(0.0, 1.0);
+    }
+    Ok(())
+}
+mod error;
+mod header;
+mod parser;
+use wasm_bindgen::prelude::*;
+use crate::header::{DataType, EnviHeader};
+use js_sys::{Float32Array, Array}; 
+use web_sys;
+#[macro_export]
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+#[wasm_bindgen(start)]
+pub fn start() {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+}
+#[wasm_bindgen]
+pub fn parse_envi_header(header_content: &[u8]) -> EnviHeader { 
+    log!("WASM: 開始解析ENVI頭文件...");
+    let content = std::str::from_utf8(header_content)
+        .expect("WASM Panic: 传入的HDR内容不是有效的UTF-8编码");
+    let header = parser::parse_header_str(content)
+        .expect("WASM Panic: 解析HDR字符串失败，请检查HDR文件格式");
+    log!("WASM: 頭文件解析成功!");
+    header
+}
+#[wasm_bindgen]
+pub fn process_tile_data(
+    header_js: JsValue,
+    interleaved_rgb_data: &[u8], 
+    _tile_width: u32,
+    _tile_height: u32,
+    stretch_min_js: &JsValue,
+    stretch_max_js: &JsValue,
+) -> Result<Float32Array, JsValue> {
+    let header: EnviHeader = serde_wasm_bindgen::from_value(header_js)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let stretch_min_arr = Array::from(stretch_min_js);
+    let stretch_max_arr = Array::from(stretch_max_js);
+    let min_r = stretch_min_arr.get(0).as_f64().unwrap_or(0.0) as f32;
+    let max_r = stretch_max_arr.get(0).as_f64().unwrap_or(1.0) as f32;
+    let min_g = stretch_min_arr.get(1).as_f64().unwrap_or(0.0) as f32;
+    let max_g = stretch_max_arr.get(1).as_f64().unwrap_or(1.0) as f32;
+    let min_b = stretch_min_arr.get(2).as_f64().unwrap_or(0.0) as f32;
+    let max_b = stretch_max_arr.get(2).as_f64().unwrap_or(1.0) as f32;
+    log!("WASM: 正在處理瓦片數據...");
+    log!("WASM: 拉伸範圍 R: [{:.4}, {:.4}]", min_r, max_r);
+    log!("WASM: 拉伸範圍 G: [{:.4}, {:.4}]", min_g, max_g);
+    log!("WASM: 拉伸範圍 B: [{:.4}, {:.4}]", min_b, max_b);
+    let bytes_per_pixel = header.data_type.byte_size();
+    let bytes_per_rgb_pixel = bytes_per_pixel * 3;
+    let total_pixels = interleaved_rgb_data.len() / bytes_per_rgb_pixel;
+    let mut output = Vec::<f32>::with_capacity(total_pixels * 3);
+    let normalize_channel = |bytes: &[u8], data_type: DataType, min_val: f32, max_val: f32| -> f32 {
+        let range = max_val - min_val;
+        let is_le = header.byte_order == header::ByteOrder::Lsb;
+        let raw_value = match data_type {
+            DataType::U8 => bytes[0] as f32,
+            DataType::U16 => if is_le { u16::from_le_bytes(bytes.try_into().unwrap_or([0,0])) as f32 } else { u16::from_be_bytes(bytes.try_into().unwrap_or([0,0])) as f32 },
+            DataType::I16 => if is_le { i16::from_le_bytes(bytes.try_into().unwrap_or([0,0])) as f32 } else { i16::from_be_bytes(bytes.try_into().unwrap_or([0,0])) as f32 },
+            DataType::F32 => if is_le { f32::from_le_bytes(bytes.try_into().unwrap_or([0,0,0,0])) } else { f32::from_be_bytes(bytes.try_into().unwrap_or([0,0,0,0])) },
+            _ => 0.0,
+        };
+        if range.abs() < 1e-9 { if raw_value > min_val { 1.0 } else { 0.0 } } else { ((raw_value - min_val) / range).clamp(0.0, 1.0) }
+    };
+    let debug_x: u32 = 10;
+    let debug_y: u32 = 10;
+    let debug_index = (debug_y * _tile_width) + debug_x;
+    for i in 0..total_pixels {
+        let pixel_start_offset = i * bytes_per_rgb_pixel;
+        let r_start = pixel_start_offset;
+        let g_start = pixel_start_offset + bytes_per_pixel;
+        let b_start = pixel_start_offset + (bytes_per_pixel * 2);
+        let r_bytes = &interleaved_rgb_data[r_start .. r_start + bytes_per_pixel];
+        let g_bytes = &interleaved_rgb_data[g_start .. g_start + bytes_per_pixel];
+        let b_bytes = &interleaved_rgb_data[b_start .. b_start + bytes_per_pixel];
+        if i as u32 == debug_index {
+            log!("WASM: 调试 - 瓦片内坐标 ({}, {}) 的原始值:", debug_x, debug_y);
+            let is_le = header.byte_order == header::ByteOrder::Lsb;
+            let raw_r = match header.data_type {
+                 DataType::F32 => if is_le { f32::from_le_bytes(r_bytes.try_into().unwrap()) } else { f32::from_be_bytes(r_bytes.try_into().unwrap()) },
+                 DataType::I16 => if is_le { i16::from_le_bytes(r_bytes.try_into().unwrap()) as f32 } else { i16::from_be_bytes(r_bytes.try_into().unwrap()) as f32 },
+                 _ => 0.0
+            };
+            let raw_g = match header.data_type {
+                 DataType::F32 => if is_le { f32::from_le_bytes(g_bytes.try_into().unwrap()) } else { f32::from_be_bytes(g_bytes.try_into().unwrap()) },
+                 DataType::I16 => if is_le { i16::from_le_bytes(g_bytes.try_into().unwrap()) as f32 } else { i16::from_be_bytes(g_bytes.try_into().unwrap()) as f32 },
+                 _ => 0.0
+            };
+             let raw_b = match header.data_type {
+                 DataType::F32 => if is_le { f32::from_le_bytes(b_bytes.try_into().unwrap()) } else { f32::from_be_bytes(b_bytes.try_into().unwrap()) },
+                 DataType::I16 => if is_le { i16::from_le_bytes(b_bytes.try_into().unwrap()) as f32 } else { i16::from_be_bytes(b_bytes.try_into().unwrap()) as f32 },
+                 _ => 0.0
+            };
+            log!("WASM: R: {:.4}, G: {:.4}, B: {:.4}", raw_r, raw_g, raw_b);
+        }
+        let r = normalize_channel(r_bytes, header.data_type, min_r, max_r);
+        let g = normalize_channel(g_bytes, header.data_type, min_g, max_g);
+        let b = normalize_channel(b_bytes, header.data_type, min_b, max_b);
+        output.push(r);
+        output.push(g);
+        output.push(b);
+    }
+    Ok(Float32Array::from(output.as_slice()))
+}
+#[wasm_bindgen]
+pub fn get_pixel_values(
+    header_js: JsValue,
+    interleaved_rgb_data: &[u8],
+    tile_width: u32,
+    x: u32,
+    y: u32,
+    stretch_min_js: &JsValue,
+    stretch_max_js: &JsValue,
+) -> Result<JsValue, JsValue> {
+    let header: EnviHeader = serde_wasm_bindgen::from_value(header_js)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let stretch_min_arr = Array::from(stretch_min_js);
+    let stretch_max_arr = Array::from(stretch_max_js);
+    let min_r = stretch_min_arr.get(0).as_f64().unwrap_or(0.0) as f32;
+    let max_r = stretch_max_arr.get(0).as_f64().unwrap_or(1.0) as f32;
+    let min_g = stretch_min_arr.get(1).as_f64().unwrap_or(0.0) as f32;
+    let max_g = stretch_max_arr.get(1).as_f64().unwrap_or(1.0) as f32;
+    let min_b = stretch_min_arr.get(2).as_f64().unwrap_or(0.0) as f32;
+    let max_b = stretch_max_arr.get(2).as_f64().unwrap_or(1.0) as f32;
+    let bytes_per_pixel = header.data_type.byte_size();
+    let bytes_per_rgb_pixel = bytes_per_pixel * 3;
+    let pixel_index = (y * tile_width + x) as usize;
+    let pixel_start = pixel_index * bytes_per_rgb_pixel;
+    if pixel_start + bytes_per_rgb_pixel > interleaved_rgb_data.len() {
+        return Err(JsValue::from_str("像素坐标超出瓦片范围"));
+    }
+    let r_bytes = &interleaved_rgb_data[pixel_start .. pixel_start + bytes_per_pixel];
+    let g_bytes = &interleaved_rgb_data[pixel_start + bytes_per_pixel .. pixel_start + 2 * bytes_per_pixel];
+    let b_bytes = &interleaved_rgb_data[pixel_start + 2 * bytes_per_pixel .. pixel_start + 3 * bytes_per_pixel];
+    let is_le = header.byte_order == header::ByteOrder::Lsb;
+    let raw_value = |bytes: &[u8]| -> f32 {
+        match header.data_type {
+            DataType::U8 => bytes[0] as f32,
+            DataType::U16 => if is_le { u16::from_le_bytes(bytes.try_into().unwrap_or([0,0])) as f32 } else { u16::from_be_bytes(bytes.try_into().unwrap_or([0,0])) as f32 },
+            DataType::I16 => if is_le { i16::from_le_bytes(bytes.try_into().unwrap_or([0,0])) as f32 } else { i16::from_be_bytes(bytes.try_into().unwrap_or([0,0])) as f32 },
+            DataType::F32 => if is_le { f32::from_le_bytes(bytes.try_into().unwrap_or([0,0,0,0])) } else { f32::from_be_bytes(bytes.try_into().unwrap_or([0,0,0,0])) },
+            _ => 0.0,
+        }
+    };
+    let normalize = |val: f32, min_val: f32, max_val: f32| -> f32 {
+        let range = max_val - min_val;
+        if range.abs() < 1e-9 { if val > min_val { 1.0 } else { 0.0 } } else { ((val - min_val) / range).clamp(0.0, 1.0) }
+    };
+    let raw_r = raw_value(r_bytes);
+    let raw_g = raw_value(g_bytes);
+    let raw_b = raw_value(b_bytes);
+    let norm_r = normalize(raw_r, min_r, max_r);
+    let norm_g = normalize(raw_g, min_g, max_g);
+    let norm_b = normalize(raw_b, min_b, max_b);
+    let obj = js_sys::Object::new();
+    js_sys::Reflect::set(&obj, &"rawR".into(), &JsValue::from_f64(raw_r as f64))?;
+    js_sys::Reflect::set(&obj, &"rawG".into(), &JsValue::from_f64(raw_g as f64))?;
+    js_sys::Reflect::set(&obj, &"rawB".into(), &JsValue::from_f64(raw_b as f64))?;
+    js_sys::Reflect::set(&obj, &"normR".into(), &JsValue::from_f64(norm_r as f64))?;
+    js_sys::Reflect::set(&obj, &"normG".into(), &JsValue::from_f64(norm_g as f64))?;
+    js_sys::Reflect::set(&obj, &"normB".into(), &JsValue::from_f64(norm_b as f64))?;
+    Ok(JsValue::from(obj))
+}
+#[wasm_bindgen]
+pub fn envi_header_to_js(header: &EnviHeader) -> JsValue {
+    serde_wasm_bindgen::to_value(header).unwrap()
+}
+#[wasm_bindgen]
+pub fn extract_band_raw(
+    header_js: JsValue,
+    img_data: &[u8],
+    band_index: usize,
+) -> Result<Float32Array, JsValue> {
+    let header: EnviHeader = serde_wasm_bindgen::from_value(header_js)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let bytes_per_pixel = header.data_type.byte_size();
+    let samples = header.samples as usize;
+    let lines = header.lines as usize;
+    let bands = header.bands as usize;
+    if band_index >= bands {
+        return Err(JsValue::from_str(&format!(
+            "band_index {} 超出波段范围 0..{}",
+            band_index, bands - 1
+        )));
+    }
+    let total_pixels = samples * lines;
+    let bytes_per_pixel_total = bytes_per_pixel * bands;
+    let is_le = header.byte_order == crate::header::ByteOrder::Lsb;
+    let mut output = Vec::<f32>::with_capacity(total_pixels);
+    for i in 0..total_pixels {
+        let pixel_start = i * bytes_per_pixel_total;
+        let band_start = pixel_start + band_index * bytes_per_pixel;
+        let band_bytes = &img_data[band_start .. band_start + bytes_per_pixel];
+        let raw_value = match header.data_type {
+            DataType::U8  => band_bytes[0] as f32,
+            DataType::U16 => if is_le { u16::from_le_bytes(band_bytes.try_into().unwrap()) as f32 } 
+                             else { u16::from_be_bytes(band_bytes.try_into().unwrap()) as f32 },
+            DataType::I16 => if is_le { i16::from_le_bytes(band_bytes.try_into().unwrap()) as f32 } 
+                             else { i16::from_be_bytes(band_bytes.try_into().unwrap()) as f32 },
+            DataType::F32 => if is_le { f32::from_le_bytes(band_bytes.try_into().unwrap()) } 
+                             else { f32::from_be_bytes(band_bytes.try_into().unwrap()) },
+            _ => 0.0,
+        };
+        output.push(raw_value);
+    }
+    Ok(Float32Array::from(output.as_slice()))
+}
+#[wasm_bindgen]
+pub fn extract_band_normalized(
+    header_js: JsValue,
+    img_data: &[u8],
+    band_index: usize,
+    low_percent: f32,   
+    high_percent: f32,  
+) -> Result<Float32Array, JsValue> {
+    let header: EnviHeader = serde_wasm_bindgen::from_value(header_js)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let bytes_per_pixel = header.data_type.byte_size();
+    let samples = header.samples as usize;
+    let lines = header.lines as usize;
+    let bands = header.bands as usize;
+    if band_index >= bands {
+        return Err(JsValue::from_str(&format!(
+            "band_index {} 超出波段范围 0..{}",
+            band_index, bands - 1
+        )));
+    }
+    let total_pixels = samples * lines;
+    let bytes_per_pixel_total = bytes_per_pixel * bands;
+    let is_le = header.byte_order == crate::header::ByteOrder::Lsb;
+    let mut values = Vec::<f32>::with_capacity(total_pixels);
+    for i in 0..total_pixels {
+        let pixel_start = i * bytes_per_pixel_total;
+        let band_start = pixel_start + band_index * bytes_per_pixel;
+        let band_bytes = &img_data[band_start .. band_start + bytes_per_pixel];
+        let raw_value = match header.data_type {
+            DataType::U8  => band_bytes[0] as f32,
+            DataType::U16 => if is_le { u16::from_le_bytes(band_bytes.try_into().unwrap()) as f32 } 
+                             else { u16::from_be_bytes(band_bytes.try_into().unwrap()) as f32 },
+            DataType::I16 => if is_le { i16::from_le_bytes(band_bytes.try_into().unwrap()) as f32 } 
+                             else { i16::from_be_bytes(band_bytes.try_into().unwrap()) as f32 },
+            DataType::F32 => if is_le { f32::from_le_bytes(band_bytes.try_into().unwrap()) } 
+                             else { f32::from_be_bytes(band_bytes.try_into().unwrap()) },
+            _ => 0.0,
+        };
+        values.push(raw_value);
+    }
+    let mut sorted = values.clone();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = sorted.len();
+    let p_low_idx = ((n as f32) * (low_percent / 100.0)).floor() as usize;
+    let p_high_idx = ((n as f32) * (high_percent / 100.0)).ceil() as usize;
+    let min_val = sorted[p_low_idx.min(n-1)];
+    let max_val = sorted[p_high_idx.min(n-1)];
+    let range = (max_val - min_val).max(1e-9);
+    let mut output = Vec::<f32>::with_capacity(total_pixels);
+    for raw_value in values {
+        let norm = ((raw_value - min_val) / range).clamp(0.0, 1.0);
+        output.push(norm);
+    }
+    Ok(Float32Array::from(output.as_slice()))
+}
+#[wasm_bindgen]
+pub fn normalize_band_in_place(
+    data: &mut [f32],      
+    low_percent: f32,   
+    high_percent: f32,  
+) -> Result<(), JsValue> { 
+    if data.is_empty() {
+        return Ok(()); 
+    }
+    if low_percent < 0.0 || high_percent > 100.0 || low_percent >= high_percent {
+        return Err(JsValue::from_str("无效的百分位范围"));
+    }
+    let mut sorted = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = sorted.len();
+    let p_low_idx = ((n as f32) * (low_percent / 100.0)).floor() as usize;
+    let p_high_idx = ((n as f32) * (high_percent / 100.0)).ceil() as usize;
+    let min_val = sorted[p_low_idx.min(n - 1)];
+    let max_val = sorted[p_high_idx.min(n - 1)];
+    let range = (max_val - min_val).max(1e-9); 
+    for raw_value in data.iter_mut() {
+        let norm_value = (*raw_value - min_val) / range;
+        *raw_value = norm_value.clamp(0.0, 1.0);
+    }
+    Ok(())
+}
+#[wasm_bindgen]
+pub fn process_band_chunk_raw(
+    header: &EnviHeader,
+    chunk_data: &[u8],
+    ) -> Result<Float32Array, JsValue> {
+    log!(
+        "WASM: process_band_chunk_raw - 收到数据块. 大小: {} 字节. Header中的bytes_per_pixel: {}.",
+        chunk_data.len(),
+        header.bytes_per_pixel
+    );
+    let bytes_per_pixel = header.bytes_per_pixel;
+    if bytes_per_pixel == 0 {
+        return Err(JsValue::from_str("WASM Error: header.bytes_per_pixel is zero! This should not happen."));
+    }
+    let is_le = header.byte_order == crate::header::ByteOrder::Lsb;
+    if chunk_data.len() % bytes_per_pixel != 0 {
+        let error_msg = format!(
+            "WASM Error: 数据块大小 ({}) 不是 bytes_per_pixel ({}) 的整数倍!",
+            chunk_data.len(),
+            bytes_per_pixel
+        );
+        log!("{}", &error_msg);
+        return Err(JsValue::from_str(&error_msg));
+    }
+    let total_pixels_in_chunk = chunk_data.len() / bytes_per_pixel;
+    let mut output = Vec::<f32>::with_capacity(total_pixels_in_chunk);
+    for i in 0..total_pixels_in_chunk {
+        let pixel_start = i * bytes_per_pixel;
+        let pixel_bytes = &chunk_data[pixel_start .. pixel_start + bytes_per_pixel];
+        let raw_value = match header.data_type {
+            DataType::U8 => pixel_bytes[0] as f32,
+            DataType::I16 => {
+                let bytes: [u8; 2] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 2] failed"))?;
+                if is_le { i16::from_le_bytes(bytes) as f32 } else { i16::from_be_bytes(bytes) as f32 }
+            },
+            DataType::U16 => {
+                let bytes: [u8; 2] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 2] failed"))?;
+                if is_le { u16::from_le_bytes(bytes) as f32 } else { u16::from_be_bytes(bytes) as f32 }
+            },
+            DataType::I32 => {
+                let bytes: [u8; 4] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 4] failed"))?;
+                if is_le { i32::from_le_bytes(bytes) as f32 } else { i32::from_be_bytes(bytes) as f32 }
+            },
+            DataType::U32 => {
+                let bytes: [u8; 4] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 4] failed"))?;
+                if is_le { u32::from_le_bytes(bytes) as f32 } else { u32::from_be_bytes(bytes) as f32 }
+            },
+            DataType::F32 => {
+                let bytes: [u8; 4] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 4] failed"))?;
+                if is_le { f32::from_le_bytes(bytes) } else { f32::from_be_bytes(bytes) }
+            },
+            DataType::I64 => {
+                let bytes: [u8; 8] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 8] failed"))?;
+                if is_le { i64::from_le_bytes(bytes) as f32 } else { i64::from_be_bytes(bytes) as f32 }
+            },
+            DataType::U64 => {
+                let bytes: [u8; 8] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 8] failed"))?;
+                if is_le { u64::from_le_bytes(bytes) as f32 } else { u64::from_be_bytes(bytes) as f32 }
+            },
+            DataType::F64 => {
+                let bytes: [u8; 8] = pixel_bytes.try_into().map_err(|_| JsValue::from_str("Slice to [u8; 8] failed"))?;
+                if is_le { f64::from_le_bytes(bytes) as f32 } else { f64::from_be_bytes(bytes) as f32 }
+            },
+        };
+        output.push(raw_value);
+    }
+    log!(
+        "WASM: 数据块处理成功. 预计输出 {} 个浮点数.",
+        output.len()
+    );
+    Ok(Float32Array::from(output.as_slice()))
+}
+use crate::error::EnviError;
+use serde::{Serialize, Deserialize};
+use wasm_bindgen::prelude::*;
+use std::str::FromStr;
+use std::collections::HashMap;
+#[wasm_bindgen]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum Interleave {
+    Bsq,
+    Bil,
+    Bip,
+}
+impl FromStr for Interleave {
+    type Err = EnviError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "bsq" => Ok(Interleave::Bsq),
+            "bil" => Ok(Interleave::Bil),
+            "bip" => Ok(Interleave::Bip),
+            _ => Err(EnviError::InvalidFieldValue {
+                field: "interleave".to_string(),
+                value: s.to_string(),
+            }),
+        }
+    }
+}
+#[wasm_bindgen]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum ByteOrder {
+    Lsb,
+    Msb,
+}
+impl ByteOrder {
+    pub fn from_code(code: i32) -> Result<Self, EnviError> {
+        match code {
+            0 => Ok(ByteOrder::Lsb),
+            1 => Ok(ByteOrder::Msb),
+            _ => Err(EnviError::UnsupportedByteOrder(code)),
+        }
+    }
+}
+#[wasm_bindgen]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum DataType {
+    U8, I16, I32, F32, F64, ComplexF32, ComplexF64, U16, U32, I64, U64,
+}
+impl DataType {
+    pub fn from_code(code: i32) -> Result<Self, EnviError> {
+        match code {
+            1 | 16 => Ok(DataType::U8), 2 => Ok(DataType::I16), 3 => Ok(DataType::I32),
+            4 => Ok(DataType::F32), 5 => Ok(DataType::F64), 6 => Ok(DataType::ComplexF32),
+            9 => Ok(DataType::ComplexF64), 12 => Ok(DataType::U16), 13 => Ok(DataType::U32),
+            14 => Ok(DataType::I64), 15 => Ok(DataType::U64),
+            _ => Err(EnviError::UnsupportedDataType(code)),
+        }
+    }
+    pub fn byte_size(&self) -> usize {
+        match self {
+            DataType::U8 => 1, DataType::I16 | DataType::U16 => 2,
+            DataType::I32 | DataType::U32 | DataType::F32 => 4,
+            DataType::F64 | DataType::I64 | DataType::U64 | DataType::ComplexF32 => 8,
+            DataType::ComplexF64 => 16,
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnviHeader {
+    pub samples: u32,
+    pub lines: u32,
+    pub bands: u32,
+    pub data_type: DataType,
+    pub interleave: Interleave,
+    pub byte_order: ByteOrder,
+    pub description: Option<String>,
+    pub header_offset: usize,
+    pub file_type: Option<String>,
+    pub sensor_type: Option<String>,
+    pub wavelength: Option<Vec<f64>>,
+    #[serde(skip_deserializing)]
+    pub bytes_per_pixel: usize,
+    pub custom_fields: HashMap<String, String>,
+}
+impl EnviHeader {
+    pub fn to_js(&self) -> Result<JsValue, JsValue> {
+        serde_wasm_bindgen::to_value(self)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+}
