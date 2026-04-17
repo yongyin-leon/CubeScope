@@ -1,4 +1,4 @@
-// SystemMonitorPanel.js
+// system-monitor-panel.js
 
 /**
  * @fileoverview

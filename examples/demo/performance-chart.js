@@ -1,5 +1,5 @@
 /**
- * @file PerformanceChart.js
+ * @file performance-chart.js
  * @description Defines the PerformanceChart class for rendering performance metrics using Chart.js.
  * @description-zh 定义了 PerformanceChart 类，用于使用 Chart.js 渲染性能指标。
  */

@@ -17,6 +17,40 @@ export type ViewerRuntimeConfig = {
   tilePreloading?: boolean;
 };
 
+export type CubeBandDisplayRole = 'red' | 'green' | 'blue' | 'nir' | 'gray' | 'other';
+
+export type CubeBandMetadata = {
+  index: number;
+  name?: string;
+  wavelength?: number;
+  displayRole?: CubeBandDisplayRole;
+};
+
+export type CubeSpatialReference = {
+  affineTransform?: [number, number, number, number, number, number];
+  epsg?: number;
+  coordinateSystemString?: string;
+  mapInfo?: string | string[] | Record<string, unknown>;
+};
+
+export type CubeHeader = {
+  samples: number;
+  lines: number;
+  bands: number;
+  interleave: 'bip' | 'bil' | 'bsq';
+  dataType: string;
+  byteOrder: string;
+  headerOffset: number;
+  bytesPerPixel: number;
+  description?: string;
+  fileType?: string;
+  sensorType?: string;
+  wavelength?: number[];
+  customFields?: Record<string, string>;
+  bandMetadata?: CubeBandMetadata[];
+  spatialReference?: CubeSpatialReference;
+};
+
 export type ViewerOptions = {
   workerUrl?: string;
   wasmJsUrl?: string;
@@ -42,8 +76,8 @@ export type ViewerEventMap = {
   ready: void;
   loadstart: void;
   loadend: void;
-  header: Record<string, unknown>;
-  headerloaded: Record<string, unknown>;
+  header: CubeHeader;
+  headerloaded: CubeHeader;
   bandschange: ViewerBands;
   bandschanged: ViewerBands;
   progress: ViewerProgressEvent;
@@ -56,7 +90,7 @@ export type ViewerEventMap = {
   statechange: { loading: boolean; message?: string };
 };
 
-export default class EnviViewer {
+export declare class CubeViewer {
   constructor(container: HTMLElement, options?: ViewerOptions);
   on<K extends keyof ViewerEventMap>(eventName: K, listener: (payload: ViewerEventMap[K]) => void): void;
   off<K extends keyof ViewerEventMap>(eventName: K, listener: (payload: ViewerEventMap[K]) => void): void;
@@ -66,7 +100,10 @@ export default class EnviViewer {
   unload(): Promise<void>;
   setBands(bands: ViewerBands): void;
   updateConfig(config?: ViewerRuntimeConfig): void;
-  getHeader(): Record<string, unknown> | null;
+  getHeader(): CubeHeader | null;
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>;
   destroy(): void;
 }
+
+export { CubeViewer as EnviViewer };
+export default CubeViewer;

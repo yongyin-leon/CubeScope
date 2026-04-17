@@ -2,7 +2,7 @@ import { cpSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const projectRoot = process.cwd();
-const sourcePkgDir = resolve(projectRoot, 'src/lib/pkg');
+const sourcePkgDir = resolve(projectRoot, 'src/runtime/pkg');
 const distPkgDir = resolve(projectRoot, 'dist/pkg');
 
 mkdirSync(distPkgDir, { recursive: true });

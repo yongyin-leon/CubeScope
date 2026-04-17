@@ -6,7 +6,7 @@ export default defineConfig({
     emptyOutDir: false,
     sourcemap: true,
     lib: {
-      entry: resolve(__dirname, 'src/lib/worker.js'),
+      entry: resolve(__dirname, 'src/runtime/viewer-worker.js'),
       formats: ['es'],
       fileName: () => 'worker.js',
     },

@@ -23,7 +23,7 @@ npm run fixtures:generate
 ## Rebuild Commands
 
 ```bash
-# Rebuild the Rust/WASM runtime into src/lib/pkg
+# Rebuild the Rust/WASM runtime into src/runtime/pkg
 npm run build:wasm
 
 # Rebuild the browser SDK, worker bundle, and runtime assets into dist/
@@ -45,8 +45,8 @@ npm run verify:alpha
 
 ## Expected Outputs
 
-- `src/lib/pkg/envi_parser.js`
-- `src/lib/pkg/envi_parser_bg.wasm`
+- `src/runtime/pkg/envi_parser.js`
+- `src/runtime/pkg/envi_parser_bg.wasm`
 - `dist/cubescope.es.js`
 - `dist/worker.js`
 - `dist/pkg/*`
@@ -55,9 +55,12 @@ npm run verify:alpha
 ## Notes
 
 - `dist/` is a build artifact, not source of truth.
-- Rust source under `rust/envi_parser_Improved/` remains the authority for the
+- Rust source under `rust/envi-parser/` remains the authority for the
   wasm runtime.
 - The WASM rebuild script prefers the `rustup` toolchain when available so the
   `cargo` and `rustc` pair stays consistent across local environments.
+- `wasm-bindgen-cli 0.2.100` should only be updated together with the
+  reproducibility doc, CI workflow, and local verification commands in the same
+  change.
 - The synthetic ENVI fixture under `test-data/fixtures/` is deterministic and
   can be regenerated with `npm run fixtures:generate`.

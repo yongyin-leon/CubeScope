@@ -1,7 +1,7 @@
-import EnviViewer from '../src/EnviViewer.js';
-import { EChartsPerformanceChart } from './demo/EChartsPerformanceChart.js';
-import { PerformanceMonitorRust } from './demo/PerformanceMonitorRust.js';
-import { SystemMonitorPanel } from './demo/SystemMonitorPanel.js';
+import CubeViewer from '../src/cube-viewer.js';
+import { EChartsPerformanceChart } from './demo/echarts-performance-chart.js';
+import { PerformanceMonitorRust } from './demo/rust-performance-monitor.js';
+import { SystemMonitorPanel } from './demo/system-monitor-panel.js';
 import { DebugPanel } from './demo/debug-panel.js';
 
 // --- (EN) DOM Element References / (ZH) DOM 元素引用 ---
@@ -72,9 +72,9 @@ async function main() {
         return;
     }
 
-    // EN: Initialize the EnviViewer with paths and configuration.
-    // ZH: 使用路径和配置初始化 EnviViewer。
-    const viewer = new EnviViewer(viewerContainer, { workerUrl: '/src/lib/worker.js' });
+    // EN: Initialize the CubeViewer with paths and configuration.
+    // ZH: 使用路径和配置初始化 CubeViewer。
+    const viewer = new CubeViewer(viewerContainer, { workerUrl: '/src/runtime/viewer-worker.js' });
     demoState.viewer = viewer;
 
     // Performance monitoring setup

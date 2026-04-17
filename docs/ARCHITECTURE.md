@@ -55,8 +55,10 @@ Responsibilities:
 
 1. Parse metadata
 2. Understand layout rules
-3. Provide band/tile/spectrum extraction services
-4. Describe format capabilities
+3. Normalize band metadata such as names, wavelengths, and display hints
+4. Normalize spatial metadata such as affine transforms and coordinate system descriptors
+5. Provide band/tile/spectrum extraction services
+6. Describe format capabilities
 
 Suggested first-party adapters:
 
@@ -72,8 +74,9 @@ Responsibilities:
 1. Expose normalized metadata
 2. Serve tile reads
 3. Serve spectrum reads
-4. Manage statistics cache
-5. Hide format-specific details from upper layers
+4. Expose pixel-space and world-space mapping services when spatial metadata exists
+5. Manage statistics cache
+6. Hide format-specific details from upper layers
 
 ### 4. Renderer
 
@@ -93,6 +96,16 @@ Renderer variants:
 - `renderer-webgl`
 
 The core system should choose WebGPU first and fall back gracefully.
+
+Renderer input contract:
+
+1. The renderer accepts prepared raster tiles or layers plus view state.
+2. The renderer does not parse source bytes, choose dataset bands, or own
+   format-specific metadata normalization.
+3. The renderer may own GPU-backed caches, but it must not own source-scoped
+   metadata or statistics caches.
+4. The renderer must be disposable at the source boundary without leaving live
+   GPU resources behind.
 
 ### 5. Tool System
 
@@ -119,6 +132,67 @@ Runtime targets:
 - `remote`
 
 This is the main expansion seam for future algorithms.
+
+## Minimum Concrete Interface Floor
+
+Before the next feature wave widens the implementation, the documented seams
+should become concrete internal interfaces in code.
+
+Suggested minimum floor:
+
+```ts
+interface FormatAdapter {
+  parseHeader(input: {
+    headerSource?: DataSource
+    headerBytes?: Uint8Array
+  }): Promise<CubeHeader>
+  readTile(request: TileReadRequest): Promise<TileChunk>
+  readSpectrum(request: SpectrumReadRequest): Promise<Float32Array>
+}
+
+interface CubeStore {
+  getHeader(): CubeHeader
+  getTile(request: TileReadRequest): Promise<TileChunk>
+  getSpectrum(request: SpectrumReadRequest): Promise<Float32Array | null>
+  unload(): Promise<void>
+  pixelToWorld?(x: number, y: number): [number, number] | null
+  worldToPixel?(x: number, y: number): [number, number] | null
+}
+
+type RendererInput = {
+  sourceId: string
+  viewState: unknown
+  layers: unknown[]
+  tiles: TileChunk[]
+}
+
+interface Renderer {
+  render(input: RendererInput): Promise<void>
+  disposeSource(sourceId: string): Promise<void>
+  destroy(): Promise<void>
+}
+```
+
+The point of this floor is not package count. It is to prevent architectural
+boundaries from existing only in prose.
+
+Current concrete floor in source:
+
+- `src/sources/data-source.js`
+- `src/formats/format-adapter.js`
+- `src/formats/envi-format-adapter.js`
+- `src/store/cube-store.js`
+- `src/rendering/renderer-contract.js`
+- `src/rendering/webgpu-renderer.js`
+
+Current alpha runtime adoption:
+
+1. `src/runtime/viewer-runtime.js` now crosses the load path through
+   `DataSource -> FormatAdapter -> CubeStore`
+2. `src/runtime/viewer-runtime.js` now delegates draw calls and GPU tile
+   resource ownership to `src/rendering/webgpu-renderer.js`
+3. renderer input is frozen as an internal contract helper before deeper
+   renderer/store separation work in the next phase
 
 ## Analysis Architecture
 
@@ -155,22 +229,63 @@ viewer core.
 ## Worker Model
 
 The current alpha already uses workers through a shared contract in
-`src/lib/protocol.js`. A later refactor may promote that into a standalone
+`src/protocol/worker-protocol.js`. A later refactor may promote that into a standalone
 package once finer-grained internal modules are justified.
 
-Recommended commands:
+Current alpha command set in code:
 
 - `init`
-- `parse_header`
-- `compute_stats`
-- `read_tile`
-- `read_spectrum`
-- `run_analysis`
 - `cancel`
+- `calculate_stats`
+- `load_tile`
+- `get_spectrum`
+
+Required next-step protocol additions before broader refactors:
+
+- `parse_header`
+- `run_analysis`
 
 Recommended principle:
 
 > All worker messages must use explicit typed schemas.
+
+Required envelope floor:
+
+```ts
+type WorkerRequestEnvelope = {
+  type: string
+  sourceId: number
+  requestId?: string
+  payload: unknown
+}
+
+type WorkerResponseEnvelope = {
+  type: string
+  sourceId: number
+  requestId?: string
+  payload?: unknown
+  error?: { message: string }
+}
+```
+
+`cancel` semantics must be explicit:
+
+1. `cancel` always targets a `requestId` and `sourceId`
+2. after cancellation, a worker may drop temporary state for that request and
+   must suppress any late result
+3. the caller that issued `cancel` is responsible for clearing pending
+   resolvers, loading state, and cache references tied to that request
+4. switching source acts as an implicit cancel-all for the previous `sourceId`
+
+Current alpha implementation floor:
+
+1. the runtime tracks active worker request ids per source and broadcasts
+   `cancel` for each tracked request on `unload()`, destroy, and source switch
+2. the worker suppresses late `stats`, `tile`, and `spectrum` results for
+   canceled requests and returns the worker to the idle pool through a
+   `canceled` response
+3. source mismatch on the main thread remains a second safety fence even after
+   request-scoped cancellation
 
 ## Memory and Inter-Thread Data Flow
 
@@ -243,6 +358,19 @@ Recommended eviction rules:
 4. GPU-backed cache entries must release their device resources immediately on
    eviction.
 
+Current implementation status (2026-04-17):
+
+1. `metadata cache` and `stats cache` are now concrete source-scoped runtime
+   slices in `src/runtime/source-cache.js`, consumed by
+   `src/runtime/viewer-runtime.js`
+2. `render tile cache` is now renderer-owned in
+   `src/rendering/webgpu-renderer.js`, with byte/tile budgets and immediate GPU
+   disposal on eviction, source teardown, and device loss
+3. `raw tile cache` policy is frozen in code, but the dedicated runtime slice
+   remains a reserved seam until raw-byte caching is extracted from the current
+   tile flow
+4. `unload()` remains the public trigger that clears source-scoped caches
+
 ## Layer Model
 
 Everything visual should become a layer.
@@ -262,10 +390,10 @@ This is what will make analysis extensibility practical.
 
 Current files and suggested destination:
 
-- `rust/envi_parser_Improved/src/*` -> `crates/envi-core`, `crates/cubescope-wasm`
-- `src/lib/worker.js` -> `packages/protocol`, `packages/core`, worker entry
-- `src/lib/hsi-wasm.js` -> split across `packages/core` and renderer packages
-- `src/EnviViewer.js` -> `packages/web`
+- `rust/envi-parser/src/*` -> `crates/envi-core`, `crates/cubescope-wasm`
+- `src/runtime/viewer-worker.js` -> `packages/protocol`, `packages/core`, worker entry
+- `src/runtime/viewer-runtime.js` -> split across `packages/core` and renderer packages
+- `src/cube-viewer.js` -> `packages/web`
 - `examples/*` -> `apps/demo`
 - debug/performance panels -> `apps/demo`, not core packages
 

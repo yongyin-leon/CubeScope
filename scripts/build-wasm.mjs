@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const projectRoot = process.cwd();
-const crateDir = resolve(projectRoot, 'rust/envi_parser_Improved');
-const outDir = resolve(projectRoot, 'src/lib/pkg');
+const crateDir = resolve(projectRoot, 'rust/envi-parser');
+const outDir = resolve(projectRoot, 'src/runtime/pkg');
 const wasmArtifact = resolve(
     crateDir,
     'target/wasm32-unknown-unknown/release/envi_parser.wasm'

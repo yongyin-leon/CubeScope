@@ -59,11 +59,11 @@ server and load the synthetic fixture under `test-data/fixtures/`.
 The public API remains class-based for the alpha.
 
 ```js
-import EnviViewer from '../src/EnviViewer.js';
+import CubeViewer from '../src/cube-viewer.js';
 
 const container = document.getElementById('viewer');
-const viewer = new EnviViewer(container, {
-  workerUrl: '/src/lib/worker.js',
+const viewer = new CubeViewer(container, {
+  workerUrl: '/src/runtime/viewer-worker.js',
 });
 
 await viewer.init();
@@ -92,24 +92,27 @@ The alpha package keeps one public browser SDK, plus explicit runtime assets:
 For bundlers that support asset URLs, the intended pattern is:
 
 ```js
-import EnviViewer from '@cubescope/web';
+import CubeViewer from '@cubescope/web';
 import workerUrl from '@cubescope/web/worker.js?url';
 import wasmJsUrl from '@cubescope/web/pkg/envi_parser.js?url';
 import wasmWasmUrl from '@cubescope/web/pkg/envi_parser_bg.wasm?url';
 
-const viewer = new EnviViewer(container, {
+const viewer = new CubeViewer(container, {
   workerUrl,
   wasmJsUrl,
   wasmWasmUrl,
 });
 ```
 
+During `0.x`, the package also keeps `EnviViewer` as a compatibility export
+alias, but `CubeViewer` is the preferred public name.
+
 ## Stable Alpha API
 
 ### Constructor
 
 ```js
-const viewer = new EnviViewer(container, options);
+const viewer = new CubeViewer(container, options);
 ```
 
 `options`:
@@ -191,6 +194,8 @@ npm run verify:alpha
 - API contract: [docs/API.md](docs/API.md)
 - Blueprint: [docs/CUBESCOPE_BLUEPRINT.md](docs/CUBESCOPE_BLUEPRINT.md)
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
+- Documentation review: [docs/DOCUMENTATION_REVIEW.md](docs/DOCUMENTATION_REVIEW.md)
+- Next task list: [docs/NEXT_DEVELOPMENT_TASKS.md](docs/NEXT_DEVELOPMENT_TASKS.md)
 - Reproducibility steps: [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)
 - Alpha release checklist: [docs/ALPHA_RELEASE_CHECKLIST.md](docs/ALPHA_RELEASE_CHECKLIST.md)
 

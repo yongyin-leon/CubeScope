@@ -33,11 +33,15 @@ class InternalViewerMock {
     }
 }
 
-vi.mock('../../src/lib/hsi-wasm.js', () => ({
-    EnviViewer: InternalViewerMock,
+vi.mock('../../src/runtime/viewer-runtime.js', () => ({
+    ViewerRuntime: InternalViewerMock,
 }));
 
-const { default: EnviViewer } = await import('../../src/EnviViewer.js');
+const {
+    CubeViewer,
+    EnviViewer,
+    default: DefaultCubeViewer,
+} = await import('../../src/cube-viewer.js');
 
 function createFile(name, content) {
     const bytes = typeof content === 'string'
@@ -56,7 +60,7 @@ function createFile(name, content) {
     };
 }
 
-describe('EnviViewer public wrapper', () => {
+describe('CubeViewer public wrapper', () => {
     beforeEach(() => {
         viewerInstances.length = 0;
         document.body.innerHTML = '';
@@ -64,7 +68,7 @@ describe('EnviViewer public wrapper', () => {
 
     it('normalizes source-based loads before delegating to the internal viewer', async () => {
         const container = document.createElement('div');
-        const viewer = new EnviViewer(container);
+        const viewer = new DefaultCubeViewer(container);
         const internal = viewerInstances.at(-1);
         const headerFile = createFile('cube.hdr', 'ENVI');
         const dataFile = createFile('cube.img', new Uint8Array([1, 2, 3]));
@@ -80,7 +84,7 @@ describe('EnviViewer public wrapper', () => {
 
     it('keeps loadFile as a compatibility alias', async () => {
         const container = document.createElement('div');
-        const viewer = new EnviViewer(container);
+        const viewer = new CubeViewer(container);
         const internal = viewerInstances.at(-1);
         const headerFile = createFile('cube.hdr', 'ENVI');
         const dataFile = createFile('cube.img', new Uint8Array([1]));
@@ -116,7 +120,7 @@ describe('EnviViewer public wrapper', () => {
 
     it('forwards unload and clears wrapper header state', async () => {
         const container = document.createElement('div');
-        const viewer = new EnviViewer(container);
+        const viewer = new CubeViewer(container);
         const internal = viewerInstances.at(-1);
         internal.emit('headerloaded', { bands: 32 });
 
@@ -126,5 +130,10 @@ describe('EnviViewer public wrapper', () => {
 
         expect(internal.unload).toHaveBeenCalledTimes(1);
         expect(viewer.getHeader()).toBeNull();
+    });
+
+    it('keeps EnviViewer as a compatibility export alias', () => {
+        expect(EnviViewer).toBe(CubeViewer);
+        expect(DefaultCubeViewer).toBe(CubeViewer);
     });
 });

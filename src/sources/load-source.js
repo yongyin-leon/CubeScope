@@ -2,6 +2,8 @@
  * @fileoverview Load source normalization helpers for the public viewer API.
  */
 
+import { createBlobDataSource } from './data-source.js';
+
 export const LoadSourceKind = Object.freeze({
     ENVI_LOCAL: 'envi-local'
 });
@@ -41,4 +43,18 @@ export function normalizeLoadSource(source, legacyDataFile) {
     }
 
     throw new Error('Unsupported load source. Use { kind: "envi-local", headerFile, dataFile }.');
+}
+
+export function createLocalEnviLoadSource(source, legacyDataFile) {
+    const normalizedSource = normalizeLoadSource(source, legacyDataFile);
+
+    return {
+        ...normalizedSource,
+        headerSource: createBlobDataSource(normalizedSource.headerFile, {
+            id: `envi-local:header:${normalizedSource.headerFile.name}:${normalizedSource.headerFile.size}`,
+        }),
+        dataSource: createBlobDataSource(normalizedSource.dataFile, {
+            id: `envi-local:data:${normalizedSource.dataFile.name}:${normalizedSource.dataFile.size}`,
+        }),
+    };
 }

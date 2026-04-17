@@ -1,14 +1,13 @@
 /**
  * @fileoverview
- * EN: Core file for the EnviViewer library. It defines the main EnviViewer class,
- *     which encapsulates all functionality for loading, rendering, and interacting
- *     with ENVI-format hyperspectral images.
- * ZH: EnviViewer 库的核心文件。它定义了主要的 EnviViewer 类，该类封装了
- *     加载、渲染和交互 ENVI 格式高光谱图像的所有功能。
+ * EN: Public wrapper for the CubeScope viewer. It defines the main CubeViewer class,
+ *     which encapsulates loading, rendering, and interaction for spectral cubes.
+ * ZH: CubeScope 查看器的公共包装层。它定义了主要的 CubeViewer 类，
+ *     封装了光谱立方体的加载、渲染与交互能力。
  */
 
-import { EnviViewer as InternalEnviViewer } from './lib/hsi-wasm.js';
-import { LoadSourceKind, normalizeLoadSource } from './lib/load-source.js';
+import { ViewerRuntime } from './runtime/viewer-runtime.js';
+import { LoadSourceKind, normalizeLoadSource } from './sources/load-source.js';
 
 /**
  * EN: A simple event emitter class.
@@ -43,10 +42,10 @@ class EventEmitter {
 }
 
 /**
- * EN: The main class for the ENVI Viewer library.
- * ZH: ENVI 查看器库的主类。
+ * EN: The main public CubeScope viewer class.
+ * ZH: CubeScope 的公共查看器主类。
  */
-export default class EnviViewer extends EventEmitter {
+class CubeViewer extends EventEmitter {
     #internalViewer;
     #canvas;
     #container;
@@ -54,11 +53,11 @@ export default class EnviViewer extends EventEmitter {
     #header;
 
     /**
-     * EN: Creates an instance of EnviViewer.
-     * ZH: 创建 EnviViewer 的实例。
+     * EN: Creates an instance of CubeViewer.
+     * ZH: 创建 CubeViewer 的实例。
      * @param {HTMLElement} container The HTML element to render the viewer into.
      * @param {object} options Configuration options.
-     * @param {string} options.workerUrl Path to the worker.js file.
+     * @param {string} options.workerUrl Path to the viewer worker file.
      * @param {string} options.wasmJsUrl Path to the wasm-bindgen generated JS file.
      * @param {string} options.wasmWasmUrl Path to the .wasm file.
      */
@@ -75,7 +74,7 @@ export default class EnviViewer extends EventEmitter {
         this.#canvas.style.height = '100%';
         this.#container.appendChild(this.#canvas);
 
-        this.#internalViewer = new InternalEnviViewer(this.#canvas, {
+        this.#internalViewer = new ViewerRuntime(this.#canvas, {
             wasmJsPath: this.#options.wasmJsUrl,
             wasmWasmPath: this.#options.wasmWasmUrl,
             workerPath: this.#options.workerUrl,
@@ -209,3 +208,6 @@ export default class EnviViewer extends EventEmitter {
         this.events = {}; // Clear all event listeners
     }
 }
+
+export { CubeViewer, CubeViewer as EnviViewer };
+export default CubeViewer;

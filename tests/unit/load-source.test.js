@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LoadSourceKind, normalizeLoadSource } from '../../src/lib/load-source.js';
+import { LoadSourceKind, normalizeLoadSource } from '../../src/sources/load-source.js';
 
 function createFile(name, content) {
     return new File([content], name, { type: 'application/octet-stream' });

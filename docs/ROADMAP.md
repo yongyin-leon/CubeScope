@@ -15,8 +15,8 @@ a private `0.1.0-alpha.1` local release-candidate state:
 - Phase 1 is largely complete at the public-contract level
 - Phase 2 has started, with packaging, test, and benchmark infrastructure in
   place
-- the remaining release blocker is external verification on GitHub Actions with
-  Node 22 before tagging and opening the repository
+- the remaining release blockers are GitHub Actions verification on Node 22 and
+  consumer-app embedding verification before tagging and opening the repository
 
 What this means in practice:
 
@@ -25,6 +25,112 @@ What this means in practice:
    loading, and deeper internal extractions are still pending
 3. the project is not yet in Phase 3 analysis work, even though spectral probe
    functionality already exists
+
+## Near-Term Execution Rule (2026-04)
+
+The next implementation window should be boundary-first rather than
+feature-first:
+
+1. freeze the public contract, especially `CubeHeader`
+2. freeze the internal interface floor for `DataSource`, `FormatAdapter`,
+   `CubeStore`, and renderer input
+3. isolate worker protocol typing, cancellation, renderer input, and cache
+   ownership semantics
+4. close external release gates
+5. only then widen capability through multispectral, geospatial, and remote
+   data access
+
+This order reduces the risk that attractive feature work hardens accidental
+coupling.
+
+## Internal Refactor And Semver Policy
+
+While `@cubescope/web` is the only public package, internal refactors must not
+create avoidable public churn.
+
+1. purely internal moves, extractions, and file reorganization do not justify a
+   public API change by themselves
+2. additive public capabilities should arrive as additive fields, events, or
+   methods whenever possible
+3. breaking public changes require explicit migration notes even during `0.x`
+4. deprecated public APIs must be announced at least one minor release before
+   removal
+5. public package splits happen only when a second adapter, renderer, or
+   downstream consumer genuinely needs independent semver
+
+## Strategic Adoption Queue (2026-04)
+
+The following strategic ideas are worth adopting, but not at the same priority
+or risk level. They should be staged so they strengthen the alpha-to-paper path
+instead of delaying it.
+
+### Do Now: next execution priority after `0.1.0-alpha.1`
+
+1. freeze the public header contract and internal interface floor
+   - reason: downstream capabilities now depend more on boundary quality than
+     raw feature count
+   - target phase: late Phase 1 into early Phase 2
+   - expected paper value: strengthens reproducibility and architectural
+     credibility for a software paper
+2. multispectral and visible-light support through normalized band metadata and
+   default display logic
+   - reason: this broadens the user base without breaking the viewer-kernel
+     strategy
+   - target phase: Phase 2
+   - expected paper value: strengthens the software-paper story as reusable
+     remote-sensing software rather than hyperspectral-only tooling
+3. `HTTP range` support for ENVI through the `DataSource` abstraction
+   - reason: this most directly upgrades CubeScope from local demo utility to
+     serious cloud-adjacent research software
+   - target phase: Phase 2
+   - expected paper value: strengthens both the software paper and later
+     systems baselines
+4. georeferencing and spatial metadata normalization
+   - reason: this is a more urgent scientific-software gap than many flashy
+     analysis features
+   - target phase: late Phase 2
+   - expected paper value: improves credibility as remote-sensing software
+5. provenance and export metadata
+   - reason: publication-grade software needs reproducible outputs, not only
+     interactive viewing
+   - target phase: Phase 2 into early Phase 3
+   - expected paper value: supports SoftwareX/JOSS reuse claims and later
+     domain collaboration
+
+### Do After Public Alpha: important, but should not block the first open tag
+
+1. Jupyter / Python bridge
+   - reason: this is a major adoption multiplier for scientific users, but it
+     depends on the browser SDK being stable first
+   - target phase: after the first public alpha
+   - expected paper value: significantly improves software-paper usability and
+     citation potential
+2. radiometric calibration metadata pipeline
+   - reason: gain/offset/reflectance metadata should enter the format and store
+     model before the renderer owns real-time calibration
+   - target phase: late Phase 2 into Phase 3
+   - expected paper value: sets up a genuinely scientific rendering story
+3. reserved 4D/time-series dimension support
+   - reason: the architecture should avoid locking itself into a strict
+     `(x, y, band)` worldview even if full 4D support is deferred
+   - target phase: schema and cache-key preparation in Phase 2, implementation
+     later
+   - expected paper value: improves long-range research credibility without
+     forcing near-term complexity
+
+### Research Track: valuable, but treat as a separate experiment stream
+
+1. full end-to-end zero-copy pipeline with `SharedArrayBuffer`
+   - reason: this is high upside but high coordination cost, and should not be
+     the default correctness path
+   - target phase: Track B experimentation
+   - expected paper value: strong systems paper potential if benchmark evidence
+     is decisive
+2. Zarr / cloud-native multidimensional formats
+   - reason: strategically important, but only after `HTTP range` ENVI proves
+     the core remote-read model
+   - target phase: post-Phase 2 ecosystem expansion
+   - expected paper value: broadens long-term scientific reach
 
 ## Phase 0: Repository Hygiene
 
@@ -61,6 +167,9 @@ What this means in practice:
 
 - extract Rust ENVI parsing into `envi-core`
 - create typed worker protocol
+- define the minimum concrete interface floor for `DataSource`,
+  `FormatAdapter`, `CubeStore`, and renderer input
+- define explicit `cancel` semantics for request-scoped worker work
 - document zero-copy / transferable ownership rules for large buffers
 - define cache budgets, eviction, and invalidation rules
 - separate `viewer core` from `renderers`
@@ -72,12 +181,22 @@ What this means in practice:
 
 - completed: demo-only panels moved under `examples/demo/*`
 - completed: wrapper now exposes stable aliases for `header`, `bandschange`, runtime `updateConfig()`, and `unload()`
-- completed: shared worker protocol constants landed in `src/lib/protocol.js`
+- completed: typed worker request/response envelopes landed in `src/protocol/worker-protocol.js`, with `sourceId` and `requestId` promoted to first-class fields
 - completed: `load({ kind: 'envi-local', headerFile, dataFile })` is now the primary public load entry, with `loadFile(...)` kept as compatibility alias
+- completed: runtime request tracking and worker-side `cancel` suppression now define explicit source invalidation behavior for tile, stats, and spectrum work
 - completed: stale worker responses are isolated by `sourceId`, and source-scoped caches reset on source switch
 - completed: contract tests cover source normalization, worker protocol envelopes, and wrapper event aliases
 - completed: browser smoke automation verifies example startup, synthetic fixture load, initial render, and a `performance` event
-- next focus: split `renderer` and `cube store` responsibilities more explicitly without widening the public API
+- completed: WebGPU draw passes and GPU tile resource caches now flow through
+  `src/rendering/webgpu-renderer.js` using explicit renderer input
+- completed: source-scoped metadata/stats cache ownership is codified in
+  `src/runtime/source-cache.js`, and renderer-owned render-tile caches now
+  enforce byte/tile budgets with explicit GPU disposal and device-loss recovery
+- completed: `CubeHeader` normalization now flows through
+  `src/formats/cube-header.js`, fixing `interleave`, `dataType`, and
+  `byteOrder` into a stable public metadata contract
+- next focus: close release-facing reproducibility and metadata gates without
+  widening the public API
 
 ### Exit criteria
 
@@ -265,10 +384,10 @@ publication pipeline.
 
 The current repository already contains the seed of the eventual platform:
 
-- public wrapper: `src/EnviViewer.js`
-- viewer core and orchestration: `src/lib/hsi-wasm.js`
-- worker runtime: `src/lib/worker.js`
-- Rust/WASM parsing and extraction: `rust/envi_parser_Improved/src/*`
+- public wrapper: `src/cube-viewer.js`
+- viewer core and orchestration: `src/runtime/viewer-runtime.js`
+- worker runtime: `src/runtime/viewer-worker.js`
+- Rust/WASM parsing and extraction: `rust/envi-parser/src/*`
 - example app and demo tooling: `examples/*`, `examples/demo/*`
 
 Current strengths:
@@ -279,7 +398,7 @@ Current strengths:
 - WebGPU rendering path already exists
 - pixel spectral probing is already possible
 - basic performance instrumentation already exists
-- shared worker protocol constants and source-based load entry already exist
+- typed worker envelopes and source-based load entry already exist
 - reproducible fixture generation, smoke testing, and benchmark commands now exist
 - package metadata, citation metadata, issue templates, and contribution docs are in place
 

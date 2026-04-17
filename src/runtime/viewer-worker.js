@@ -8,13 +8,39 @@
  * WebAssembly (Wasm) 模块、解析 ENVI 文件和渲染图像瓦片，从而保持主 UI 线程的响应能力。
  */
 
-import { WorkerCommand, WorkerResponse, createWorkerMessage } from './protocol.js';
+import {
+    WorkerCommand,
+    WorkerResponse,
+    createWorkerError,
+    createWorkerResponse,
+} from '../protocol/worker-protocol.js';
+import { createWorkerCancelRegistry } from './worker-cancel-registry.js';
 
 // EN: Wasm functions that will be loaded dynamically.
 // ZH: 将被动态加载的 Wasm 函数。
 let EnviReader;
 let normalizeBandInPlaceWithStats;
 let calculateStatistics;
+const cancelRegistry = createWorkerCancelRegistry();
+let activeRequest = null;
+
+function setActiveRequest(sourceId, requestId) {
+    if (!(sourceId > 0) || !requestId) {
+        activeRequest = null;
+        return;
+    }
+
+    activeRequest = { sourceId, requestId };
+}
+
+function clearActiveRequest() {
+    activeRequest = null;
+}
+
+function isActiveRequest(sourceId, requestId) {
+    return activeRequest?.sourceId === sourceId
+        && activeRequest?.requestId === requestId;
+}
 
 /**
  * EN: Main message handler for the worker. It listens for commands from the main thread.
@@ -22,7 +48,12 @@ let calculateStatistics;
  * @param {MessageEvent} e The event object containing the message data.
  */
 self.onmessage = async (e) => {
-    const { type, payload } = e.data;
+    const {
+        type,
+        sourceId = 0,
+        requestId,
+        payload = {},
+    } = e.data;
 
     // EN: Handles the 'init' message. It dynamically imports the Wasm JavaScript bindings,
     //     fetches the Wasm binary, and initializes the module.
@@ -37,12 +68,24 @@ self.onmessage = async (e) => {
             normalizeBandInPlaceWithStats = wasmModule.normalizeBandInPlaceWithStats;
             calculateStatistics = wasmModule.calculateStatistics;
 
-            self.postMessage(createWorkerMessage(WorkerResponse.INIT_COMPLETE));
+            self.postMessage(createWorkerResponse(WorkerResponse.INIT_COMPLETE, {
+                sourceId,
+                requestId,
+            }));
         } catch (err) {
             console.error('[Worker] Fatal error during initialization / [Worker] 初始化过程中发生致命错误:', err);
-            self.postMessage(createWorkerMessage(WorkerResponse.ERROR, {
-                message: `Worker WASM initialization failed / Worker WASM 初始化失败: ${err.message}. Stack: ${err.stack}`
+            self.postMessage(createWorkerError({
+                sourceId,
+                requestId,
+                message: `Worker WASM initialization failed / Worker WASM 初始化失败: ${err.message}. Stack: ${err.stack}`,
             }));
+        }
+        return;
+    }
+
+    if (type === WorkerCommand.CANCEL) {
+        if (isActiveRequest(sourceId, requestId)) {
+            cancelRegistry.cancel(sourceId, requestId);
         }
         return;
     }
@@ -50,8 +93,10 @@ self.onmessage = async (e) => {
     // EN: Ensure the Wasm module is initialized before proceeding.
     // ZH: 确保 Wasm 模块已初始化再继续执行。
     if (!EnviReader) {
-        self.postMessage(createWorkerMessage(WorkerResponse.ERROR, {
-            message: 'Worker is not yet initialized. / Worker 尚未初始化。'
+        self.postMessage(createWorkerError({
+            sourceId,
+            requestId,
+            message: 'Worker is not yet initialized. / Worker 尚未初始化。',
         }));
         return;
     }
@@ -61,48 +106,115 @@ self.onmessage = async (e) => {
         //     global statistics (min/max) for specified bands.
         // ZH: 处理 'calculate_stats' 消息。触发对指定波段的全局统计数据（最小值/最大值）的计算。
         case WorkerCommand.CALCULATE_STATS: {
-            const { hdrBytes, imgFile, bands, header, isInitial, sourceId } = payload;
-            const enviReader = new EnviReader(hdrBytes);
-            const stats = await calculateGlobalStats(enviReader, imgFile, bands, header, isInitial);
-            self.postMessage(createWorkerMessage(WorkerResponse.STATS_COMPLETE, {
-                stats,
-                bands,
-                isInitial,
-                sourceId
-            }));
+            const { hdrBytes, imgFile, bands, header, isInitial } = payload;
+            setActiveRequest(sourceId, requestId);
+            try {
+                if (cancelRegistry.consume(sourceId, requestId)) {
+                    self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
+                        sourceId,
+                        requestId,
+                    }));
+                    break;
+                }
+                const enviReader = new EnviReader(hdrBytes);
+                const stats = await calculateGlobalStats(enviReader, imgFile, bands, header, isInitial);
+                if (cancelRegistry.consume(sourceId, requestId)) {
+                    self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
+                        sourceId,
+                        requestId,
+                    }));
+                    break;
+                }
+                self.postMessage(createWorkerResponse(WorkerResponse.STATS_COMPLETE, {
+                    sourceId,
+                    requestId,
+                    payload: {
+                        stats,
+                        bands,
+                        isInitial,
+                    },
+                }));
+            } catch (error) {
+                self.postMessage(createWorkerError({
+                    sourceId,
+                    requestId,
+                    message: error.message,
+                    payload: {
+                        bands,
+                        isInitial,
+                    },
+                }));
+            }
+            finally {
+                clearActiveRequest();
+            }
             break;
         }
         // EN: Handles the 'load_tile' message. It loads the data for a specific tile,
         //     normalizes it, and renders it into an RGBA pixel array.
         // ZH: 处理 'load_tile' 消息。加载特定瓦片的数据，进行归一化处理，并将其渲染为 RGBA 像素阵列。
         case WorkerCommand.LOAD_TILE: {
-            const { hdrBytes, imgFile, tile, bands, globalStats, header, sourceId } = payload;
+            const { hdrBytes, imgFile, tile, bands, globalStats, header } = payload;
             const enviReader = new EnviReader(hdrBytes);
+            setActiveRequest(sourceId, requestId);
             try {
+                if (cancelRegistry.consume(sourceId, requestId)) {
+                    self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
+                        sourceId,
+                        requestId,
+                    }));
+                    break;
+                }
                 const result = await loadAndRenderTile(enviReader, imgFile, tile, bands, globalStats, header);
+                if (cancelRegistry.consume(sourceId, requestId)) {
+                    self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
+                        sourceId,
+                        requestId,
+                    }));
+                    break;
+                }
                 if (result) {
                     // EN: Transfer the pixel buffer back to the main thread to avoid copying.
                     // ZH: 将像素缓冲区传回主线程以避免复制。
-                    self.postMessage(createWorkerMessage(WorkerResponse.TILE_COMPLETE, {
-                        ...result,
-                        sourceId
+                    self.postMessage(createWorkerResponse(WorkerResponse.TILE_COMPLETE, {
+                        sourceId,
+                        requestId,
+                        payload: result,
                     }), [result.pixels.buffer]);
                 } else {
-                    self.postMessage(createWorkerMessage(WorkerResponse.TILE_ERROR, { tile, sourceId }));
+                    self.postMessage(createWorkerResponse(WorkerResponse.TILE_ERROR, {
+                        sourceId,
+                        requestId,
+                        payload: { tile },
+                    }));
                 }
             } catch (error) {
-                self.postMessage(createWorkerMessage(WorkerResponse.TILE_ERROR, {
-                    tile,
-                    message: error.message,
-                    sourceId
+                self.postMessage(createWorkerResponse(WorkerResponse.TILE_ERROR, {
+                    sourceId,
+                    requestId,
+                    payload: {
+                        tile,
+                        message: error.message,
+                    },
                 }));
+            }
+            finally {
+                clearActiveRequest();
             }
             break;
         }
         case WorkerCommand.GET_SPECTRUM: {
-            const { hdrBytes, imgFile, x, y, header, requestId, sourceId } = payload;
+            const { hdrBytes, imgFile, x, y, header } = payload;
             const enviReader = new EnviReader(hdrBytes);
+            setActiveRequest(sourceId, requestId);
             try {
+                if (cancelRegistry.consume(sourceId, requestId)) {
+                    self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
+                        sourceId,
+                        requestId,
+                    }));
+                    break;
+                }
                 const TILE_SIZE = 512;
                 const tileX = Math.floor(x / TILE_SIZE);
                 const tileY = Math.floor(y / TILE_SIZE);
@@ -141,21 +253,42 @@ self.onmessage = async (e) => {
                         spectrum[b] = tile_data && tile_data.length > index ? tile_data[index] : 0;
                     }
                 }
-                self.postMessage(createWorkerMessage(WorkerResponse.SPECTRUM_COMPLETE, {
+                if (cancelRegistry.consume(sourceId, requestId)) {
+                    self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
+                        sourceId,
+                        requestId,
+                    }));
+                    break;
+                }
+                self.postMessage(createWorkerResponse(WorkerResponse.SPECTRUM_COMPLETE, {
+                    sourceId,
                     requestId,
-                    x,
-                    y,
-                    spectrum: Array.from(spectrum),
-                    sourceId
+                    payload: {
+                        x,
+                        y,
+                        spectrum: Array.from(spectrum),
+                    },
                 }));
             } catch (err) {
-                self.postMessage(createWorkerMessage(WorkerResponse.SPECTRUM_ERROR, {
+                self.postMessage(createWorkerResponse(WorkerResponse.SPECTRUM_ERROR, {
+                    sourceId,
                     requestId,
-                    message: err.message,
-                    sourceId
+                    payload: {
+                        message: err.message,
+                    },
                 }));
             }
+            finally {
+                clearActiveRequest();
+            }
             break;
+        }
+        default: {
+            self.postMessage(createWorkerError({
+                sourceId,
+                requestId,
+                message: `Unsupported worker command: ${type}`,
+            }));
         }
     }
 };

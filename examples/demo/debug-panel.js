@@ -7,7 +7,7 @@
 
 export class DebugPanel {
     // --- (EN) Private Fields / (ZH) 私有字段 ---
-    #viewer;                // EN: The EnviViewer instance. / ZH: EnviViewer 实例。
+    #viewer;                // EN: The CubeViewer instance. / ZH: CubeViewer 实例。
     #panelElement;          // EN: The main DOM element for the debug panel. / ZH: 调试面板的主 DOM 元素。
     #bgStatsCheckbox;       // EN: Checkbox to enable/disable background statistics calculation. / ZH: 用于启用/禁用后台统计信息计算的复选框。
     #tilePreloadCheckbox;   // EN: Checkbox to enable/disable tile preloading. / ZH: 用于启用/禁用切片预加载的复选框。
@@ -30,7 +30,7 @@ export class DebugPanel {
     /**
      * EN: Constructs the DebugPanel.
      * ZH: 构建 DebugPanel。
-     * @param {EnviViewer} viewer - The EnviViewer instance.
+     * @param {import('../../src/cube-viewer.js').CubeViewer} viewer - The CubeViewer instance.
      * @param {HTMLElement} panelElement - The DOM element for the debug panel.
      * @param {object} reportSources - Optional report data providers.
      */

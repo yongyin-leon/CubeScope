@@ -83,6 +83,43 @@ The first release should not try to own:
 
 Those should arrive later as plugins or companion apps.
 
+## Post-Alpha Capability Themes
+
+Once the first public alpha is stable, CubeScope should expand in a staged way
+rather than by adding every attractive idea at once.
+
+The blueprint owns the product shape, not the implementation order. Sequencing
+belongs in `docs/ROADMAP.md`.
+
+Core themes that fit the product:
+
+1. multispectral and visible-light support through normalized band metadata and
+   sensible default display logic
+2. georeferencing and spatial metadata normalization
+3. remote-readable ENVI through `DataSource` and `HTTP range`
+4. provenance/export metadata for reproducible downstream use
+
+These upgrades move CubeScope from "browser viewer" toward "scientific
+infrastructure" without diluting the viewer-kernel launch message.
+
+### High-value adoption layer after the first public alpha
+
+1. Jupyter / Python notebook bridge built on top of `@cubescope/web`
+2. radiometric metadata support that can later drive GPU-side calibration
+3. schema and cache design that leaves room for future time-series / 4D cubes
+
+These additions are strategically strong, but they should not block the first
+public software-paper release.
+
+### Research-track experiments
+
+1. full `SharedArrayBuffer` / zero-copy pipeline exploration
+2. Zarr or other cloud-native multidimensional format support
+
+These are promising differentiators, especially for systems papers, but they
+should be pursued as evidence-driven tracks rather than folded into the core
+alpha scope by default.
+
 ## Long-Term Capability Model
 
 CubeScope should grow in layers:
@@ -140,6 +177,7 @@ Before `0.3.0-beta`, keep the external release story intentionally small:
 2. keep submodules internally separated in the repo, but privately versioned
 3. split into finer public packages only when a second adapter, renderer, or
    downstream consumer needs independent semver
+4. do not let internal refactors force public package churn by themselves
 
 This reduces release friction while preserving clean internal seams.
 
