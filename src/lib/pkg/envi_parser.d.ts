@@ -1,14 +1,14 @@
 /* tslint:disable */
 /* eslint-disable */
-export function start(): void;
-export function set_logging_enabled(enabled: boolean): void;
-export function normalizeBandInPlace(data: Float32Array, low_percent: number, high_percent: number): void;
 export function normalizeBandInPlaceWithStats(data: Float32Array, min_val: number, max_val: number): void;
+export function start(): void;
 /**
  * 从一个f32数据块中高效计算统计数据（均值±2倍标准差）。
  * 这个函数避免了在JS中进行昂贵的排序操作。
  */
 export function calculateStatistics(data: Float32Array): BandStats;
+export function normalizeBandInPlace(data: Float32Array, low_percent: number, high_percent: number): void;
+export function set_logging_enabled(enabled: boolean): void;
 export enum ByteOrder {
   Lsb = 0,
   Msb = 1,
@@ -42,8 +42,9 @@ export class BandStats {
 }
 export class EnviReader {
   free(): void;
-  constructor(header_content: Uint8Array);
-  getHeaderAsJsObject(): any;
+  extractBilTileRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, band_index: number, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Float32Array;
+  extractBipTileRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, band_index: number, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Float32Array;
+  extractBsqTileRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, band_index: number, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Float32Array;
   /**
    * 提取并返回指定坐标点的高光谱曲线
    *
@@ -57,6 +58,13 @@ export class EnviReader {
    * @returns {Float32Array} - 一个包含所有波段值的数组，顺序与头文件一致。
    */
   getSpectralProfile(chunk_data: Uint8Array, chunk_start_offset_in_file: number, x: number, y: number): Float32Array;
+  getHeaderAsJsObject(): any;
+  extractRawFromBsqChunk(chunk_data: Uint8Array): Float32Array;
+  extractBipTileForBandsRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, bands_js: any, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Array<any>;
+  extractRawRgbFromBilChunk(chunk_data: Uint8Array, r_idx: number, g_idx: number, b_idx: number): object;
+  extractRawRgbFromBipChunk(chunk_data: Uint8Array, r_idx: number, g_idx: number, b_idx: number): object;
+  extractRawBandFromBilChunk(chunk_data: Uint8Array, band_idx: number): Float32Array;
+  extractRawBandFromBipChunk(chunk_data: Uint8Array, band_idx: number): Float32Array;
   /**
    * [新增] 提取并返回指定坐标点的高光谱曲线，并附带波长信息
    *
@@ -68,21 +76,13 @@ export class EnviReader {
    *     如果没有波长信息，wavelength 字段将使用波段号 (从1开始) 代替。
    */
   getSpectralProfileWithWavelengths(chunk_data: Uint8Array, chunk_start_offset_in_file: number, x: number, y: number): any;
-  extractRawFromBsqChunk(chunk_data: Uint8Array): Float32Array;
-  extractRawRgbFromBipChunk(chunk_data: Uint8Array, r_idx: number, g_idx: number, b_idx: number): object;
-  extractRawRgbFromBilChunk(chunk_data: Uint8Array, r_idx: number, g_idx: number, b_idx: number): object;
-  extractRawBandFromBipChunk(chunk_data: Uint8Array, band_idx: number): Float32Array;
-  extractRawBandFromBilChunk(chunk_data: Uint8Array, band_idx: number): Float32Array;
-  extractBilTileRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, band_index: number, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Float32Array;
-  extractBsqTileRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, band_index: number, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Float32Array;
-  extractBipTileRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, band_index: number, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Float32Array;
-  extractBipTileForBandsRaw(chunk_data: Uint8Array, chunk_start_offset_in_file: number, bands_js: any, tile_x_index: number, tile_y_index: number, tile_width: number, tile_height: number): Array<any>;
-  readonly samples: number;
-  readonly lines: number;
-  readonly bands: number;
+  constructor(header_content: Uint8Array);
+  readonly interleave: Interleave;
   readonly header_offset: number;
   readonly bytesPerPixel: number;
-  readonly interleave: Interleave;
+  readonly bands: number;
+  readonly lines: number;
+  readonly samples: number;
 }
 export class ExtractedBand {
   private constructor();
@@ -110,46 +110,46 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly start: () => void;
-  readonly set_logging_enabled: (a: number) => void;
+  readonly __wbg_bandstats_free: (a: number, b: number) => void;
   readonly __wbg_envireader_free: (a: number, b: number) => void;
   readonly __wbg_extractedband_free: (a: number, b: number) => void;
+  readonly __wbg_get_bandstats_max: (a: number) => number;
+  readonly __wbg_get_bandstats_min: (a: number) => number;
   readonly __wbg_get_extractedband_band: (a: number) => number;
-  readonly __wbg_set_extractedband_band: (a: number, b: number) => void;
   readonly __wbg_get_extractedband_data: (a: number) => any;
+  readonly __wbg_set_bandstats_max: (a: number, b: number) => void;
+  readonly __wbg_set_bandstats_min: (a: number, b: number) => void;
+  readonly __wbg_set_extractedband_band: (a: number, b: number) => void;
   readonly __wbg_set_extractedband_data: (a: number, b: any) => void;
-  readonly envireader_new: (a: number, b: number) => [number, number, number];
-  readonly envireader_samples: (a: number) => number;
-  readonly envireader_lines: (a: number) => number;
+  readonly calculateStatistics: (a: any) => [number, number, number];
   readonly envireader_bands: (a: number) => number;
-  readonly envireader_header_offset: (a: number) => number;
   readonly envireader_bytesPerPixel: (a: number) => number;
-  readonly envireader_interleave: (a: number) => number;
+  readonly envireader_extractBilTileRaw: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+  readonly envireader_extractBipTileForBandsRaw: (a: number, b: number, c: number, d: number, e: any, f: number, g: number, h: number, i: number) => [number, number, number];
+  readonly envireader_extractBipTileRaw: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+  readonly envireader_extractBsqTileRaw: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+  readonly envireader_extractRawBandFromBilChunk: (a: number, b: number, c: number, d: number) => [number, number, number];
+  readonly envireader_extractRawBandFromBipChunk: (a: number, b: number, c: number, d: number) => [number, number, number];
+  readonly envireader_extractRawFromBsqChunk: (a: number, b: number, c: number) => [number, number, number];
+  readonly envireader_extractRawRgbFromBilChunk: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly envireader_extractRawRgbFromBipChunk: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
   readonly envireader_getHeaderAsJsObject: (a: number) => [number, number, number];
   readonly envireader_getSpectralProfile: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
   readonly envireader_getSpectralProfileWithWavelengths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
-  readonly envireader_extractRawFromBsqChunk: (a: number, b: number, c: number) => [number, number, number];
-  readonly envireader_extractRawRgbFromBipChunk: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
-  readonly envireader_extractRawRgbFromBilChunk: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
-  readonly envireader_extractRawBandFromBipChunk: (a: number, b: number, c: number, d: number) => [number, number, number];
-  readonly envireader_extractRawBandFromBilChunk: (a: number, b: number, c: number, d: number) => [number, number, number];
-  readonly envireader_extractBilTileRaw: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
-  readonly envireader_extractBsqTileRaw: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
-  readonly envireader_extractBipTileRaw: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
-  readonly envireader_extractBipTileForBandsRaw: (a: number, b: number, c: number, d: number, e: any, f: number, g: number, h: number, i: number) => [number, number, number];
+  readonly envireader_header_offset: (a: number) => number;
+  readonly envireader_interleave: (a: number) => number;
+  readonly envireader_lines: (a: number) => number;
+  readonly envireader_new: (a: number, b: number) => [number, number, number];
+  readonly envireader_samples: (a: number) => number;
   readonly normalizeBandInPlace: (a: number, b: number, c: any, d: number, e: number) => [number, number];
   readonly normalizeBandInPlaceWithStats: (a: number, b: number, c: any, d: number, e: number) => [number, number];
-  readonly __wbg_bandstats_free: (a: number, b: number) => void;
-  readonly __wbg_get_bandstats_min: (a: number) => number;
-  readonly __wbg_set_bandstats_min: (a: number, b: number) => void;
-  readonly __wbg_get_bandstats_max: (a: number) => number;
-  readonly __wbg_set_bandstats_max: (a: number, b: number) => void;
-  readonly calculateStatistics: (a: any) => [number, number, number];
-  readonly __wbg_spectralpoint_free: (a: number, b: number) => void;
-  readonly __wbg_get_spectralpoint_wavelength: (a: number) => number;
-  readonly __wbg_set_spectralpoint_wavelength: (a: number, b: number) => void;
+  readonly set_logging_enabled: (a: number) => void;
+  readonly start: () => void;
   readonly __wbg_get_spectralpoint_value: (a: number) => number;
+  readonly __wbg_get_spectralpoint_wavelength: (a: number) => number;
   readonly __wbg_set_spectralpoint_value: (a: number, b: number) => void;
+  readonly __wbg_set_spectralpoint_wavelength: (a: number, b: number) => void;
+  readonly __wbg_spectralpoint_free: (a: number, b: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;

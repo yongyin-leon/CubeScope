@@ -3,8 +3,8 @@
 ## Vision
 
 `CubeScope` is a browser-native hyperspectral cube viewer focused on fast,
-zero-install exploration of ENVI datasets, with a design that can grow into a
-general spectral data platform.
+zero-install, hardware-accelerated exploration of ENVI datasets, with a design
+that can grow into a general spectral data platform.
 
 The project should prioritize:
 
@@ -43,11 +43,24 @@ It is:
 Recommended public naming:
 
 - Project: `CubeScope`
-- Tagline: `Browser-native hyperspectral cube viewer`
+- Tagline: `Browser-native, hardware-accelerated hyperspectral viewer kernel`
 - npm scope: `@cubescope/*`
-- Core browser SDK: `@cubescope/web`
-- ENVI adapter: `@cubescope/formats-envi`
-- Analysis packages: `@cubescope/analysis-*`
+- 0.x public browser SDK: `@cubescope/web`
+- future ENVI adapter package, once justified: `@cubescope/formats-envi`
+- future analysis packages: `@cubescope/analysis-*`
+
+## Launch Narrative
+
+CubeScope should enter the open-source community with a narrow and memorable
+message:
+
+1. browser-native
+2. local-first
+3. hardware-accelerated
+4. embeddable as a viewer kernel
+
+It should not initially market itself as a complete remote sensing workbench or
+an all-in-one analysis suite.
 
 ## First Public Release Scope
 
@@ -116,6 +129,20 @@ cubescope/
   docs/
 ```
 
+This is an internal architecture target, not a requirement to publish every
+directory as an npm package in the first releases.
+
+## 0.x Packaging Rule
+
+Before `0.3.0-beta`, keep the external release story intentionally small:
+
+1. publish one browser-facing SDK package
+2. keep submodules internally separated in the repo, but privately versioned
+3. split into finer public packages only when a second adapter, renderer, or
+   downstream consumer needs independent semver
+
+This reduces release friction while preserving clean internal seams.
+
 ## Release Philosophy
 
 Three rules should guide release decisions:
@@ -123,6 +150,7 @@ Three rules should guide release decisions:
 1. The public API must be smaller than the internal API.
 2. Demo code must depend on public contracts, not private state.
 3. Analysis features must compose through stable interfaces, not ad hoc hooks.
+4. Public package count in `0.x` should stay smaller than internal module count.
 
 ## Research Fit
 

@@ -19,7 +19,8 @@ export class SystemMonitorPanel {
     #currentData = null;            // EN: The most recent metrics data received. / ZH: 接收到的最新指标数据。
     #baselineCaptured = false;      // EN: Flag indicating if baseline data has been captured. / ZH: 指示是否已捕获基线数据的标志。
     #captureAttempts = 0;           // EN: Counter for attempts to capture the baseline. / ZH: 捕获基线的尝试次数计数器。
-    #viewer = null;                 // EN: Reference to the main viewer to check worker status. / ZH: 对主查看器的引用，用于检查工作线程状态。
+    #viewer = null;                 // EN: Reference to the main viewer. / ZH: 对主查看器的引用。
+    #viewerBusy = false;            // EN: Busy state tracked from public viewer events. / ZH: 基于公开事件跟踪的忙碌状态。
     #peakTrackingStarted = false;   // EN: Flag indicating if peak metric tracking has begun. / ZH: 指示是否已开始峰值指标跟踪的标志。
     #chartCallback = null;          // EN: Callback function to update an external chart. / ZH: 用于更新外部图表的回调函数。
     #historyData = [];              // EN: Stores a history of performance data records. / ZH: 存储性能数据记录的历史。
@@ -40,6 +41,7 @@ export class SystemMonitorPanel {
             return;
         }
         this.#setupUI();
+        this.#attachViewerListeners();
         this.#attachMonitorListeners();
     }
 
@@ -119,6 +121,27 @@ export class SystemMonitorPanel {
     }
 
     /**
+     * EN: Tracks viewer activity using public events only.
+     * ZH: 仅通过公开事件跟踪查看器活动状态。
+     */
+    #attachViewerListeners() {
+        if (!this.#viewer || typeof this.#viewer.on !== 'function') return;
+
+        this.#viewer.on('loadstart', () => {
+            this.#viewerBusy = true;
+        });
+        this.#viewer.on('loadend', () => {
+            this.#viewerBusy = false;
+        });
+        this.#viewer.on('destroyed', () => {
+            this.#viewerBusy = false;
+        });
+        this.#viewer.on('statechange', (state) => {
+            this.#viewerBusy = Boolean(state?.loading);
+        });
+    }
+
+    /**
      * EN: Records a snapshot of the current performance data.
      * ZH: 记录当前性能数据的快照。
      * @param {object} data - The performance data from the monitor.
@@ -172,13 +195,13 @@ export class SystemMonitorPanel {
         // Capture when current metrics data is available and CPU usage is low and no active Worker
         if (this.#currentData && this.#currentData.cpu_usage < 20) {
             // Check if there are active Workers
-            const hasActiveWorkers = this.#hasActiveWorkers();
+            const hasActiveWorkers = this.#isViewerBusy();
             
             if (!hasActiveWorkers) {
                 // Delay 0.5 seconds to check again, ensuring the system is truly idle
                 setTimeout(() => {
                     // Check CPU usage and Worker status again
-                    if (this.#currentData && this.#currentData.cpu_usage < 20 && !this.#hasActiveWorkers() && !this.#baselineCaptured) {
+                    if (this.#currentData && this.#currentData.cpu_usage < 20 && !this.#isViewerBusy() && !this.#baselineCaptured) {
                         console.log('[SystemMonitorPanel] System idle detected, capturing baseline data');
                         this.captureBaseline();
                     }
@@ -188,44 +211,12 @@ export class SystemMonitorPanel {
     }
 
     /**
-     * EN: Checks if there are any active Web Workers based on the viewer's state.
-     * ZH: 根据查看器的状态检查是否有任何活动的 Web Worker。
-     * @returns {boolean} - True if active workers are detected, otherwise false.
+     * EN: Checks whether the viewer is currently busy based on public events.
+     * ZH: 基于公开事件检查查看器当前是否处于忙碌状态。
+     * @returns {boolean} - True if the viewer is busy, otherwise false.
      */
-    #hasActiveWorkers() {
-        // If no viewer reference, return true to assume there are active Workers (conservative strategy)
-        if (!this.#viewer) return true;
-        
-        // Check Worker status in viewer
-        try {
-            // Check if there are pending tile requests or background statistics tasks
-            if (this.#viewer.hasActiveTileRequests) {
-                return true;
-            }
-            if (this.#viewer.hasBackgroundStatsTasks) {
-                return true;
-            }
-            if (this.#viewer.hasPreloadTasks) {
-                return true;
-            }
-            // Check if there is an ongoing band switch
-            if (this.#viewer.isTransitioning) {
-                return true;
-            }
-            // Check if there is a waiting statistics status
-            if (this.#viewer.isWaitingForStats) {
-                return true;
-            }
-            // Check if all Workers are idle (if there are tasks running, there should be non-idle Workers)
-            if (this.#viewer.idleWorkerCount < this.#viewer.totalWorkerCount) {
-                return true;
-            }
-            return false;
-        } catch (e) {
-            // If an error occurs, assume no active Workers
-            console.warn('[SystemMonitorPanel] Error checking Worker status:', e);
-            return false;
-        }
+    #isViewerBusy() {
+        return this.#viewerBusy;
     }
 
     /**

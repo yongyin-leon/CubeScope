@@ -154,8 +154,9 @@ viewer core.
 
 ## Worker Model
 
-The current project already uses workers well. The next version should formalize
-that into a protocol package.
+The current alpha already uses workers through a shared contract in
+`src/lib/protocol.js`. A later refactor may promote that into a standalone
+package once finer-grained internal modules are justified.
 
 Recommended commands:
 
@@ -171,6 +172,42 @@ Recommended principle:
 
 > All worker messages must use explicit typed schemas.
 
+## Memory and Inter-Thread Data Flow
+
+CubeScope will only remain credible on large cubes if binary ownership is
+treated as an architecture rule rather than an implementation detail.
+
+Recommended flow:
+
+```mermaid
+flowchart LR
+  A["DataSource read"] --> B["Format worker / adapter"]
+  B --> C["CubeStore raw/stat caches"]
+  C --> D["Renderer staging buffer"]
+  D --> E["GPU texture or compute buffer"]
+```
+
+Rules:
+
+1. Metadata and control messages may use structured clone.
+2. Large binary payloads such as tiles, spectra, and intermediate raster
+   buffers must not rely on implicit structured clone.
+3. The default browser contract should use `Transferable` `ArrayBuffer`
+   ownership transfer between workers and the main thread.
+4. `SharedArrayBuffer` is an optional optimization for proven hot paths only,
+   and only when cross-origin isolation is enabled. The public SDK must still
+   work without it.
+5. Every worker payload carrying binary data should declare enough schema
+   information to be reconstructed without guessing, such as payload kind,
+   typed-array family, shape, and ownership expectations.
+6. Renderer upload buffers and GPU resources must be owned and disposed by the
+   renderer layer, not leaked upward into application code.
+
+Operational implication:
+
+> A sender that transfers a large binary buffer must be treated as having given
+> up ownership of that buffer.
+
 ## Cache Model
 
 CubeScope should have multiple caches with clear ownership:
@@ -182,6 +219,29 @@ CubeScope should have multiple caches with clear ownership:
 5. `analysis result cache`
 
 Avoid one giant mutable cache map for everything.
+
+Recommended default policies:
+
+- `metadata cache`: source-scoped, small, retained until `unload()` or source
+  switch
+- `stats cache`: source-scoped, retained for the active cube, cleared on source
+  change
+- `raw tile cache`: viewport-aware LRU with byte budget, evict far-away tiles
+  first
+- `render tile cache`: renderer-owned GPU resource cache with explicit disposal
+  on eviction, renderer switch, or device/context loss
+- `analysis result cache`: keyed by source id + algorithm id + parameters, with
+  explicit invalidation when upstream source, ROI, or layer inputs change
+
+Recommended eviction rules:
+
+1. Switching datasets clears every source-scoped cache.
+2. Panning and zooming should prefer viewport-based retention plus bounded LRU,
+   not unbounded historical growth.
+3. Under memory pressure, raw tile and render tile caches should shrink before
+   metadata cache.
+4. GPU-backed cache entries must release their device resources immediately on
+   eviction.
 
 ## Layer Model
 
@@ -209,12 +269,17 @@ Current files and suggested destination:
 - `examples/*` -> `apps/demo`
 - debug/performance panels -> `apps/demo`, not core packages
 
+Internal directory boundaries may mirror future packages before those packages
+are independently published. During `0.x`, prefer one public browser SDK and
+keep fine-grained internal modules private until a second adapter, renderer, or
+consumer justifies independent versioning.
+
 ## Current Weak Points To Correct
 
-1. Public wrapper and demo rely on different API surfaces
-2. Renderer, scheduler, cache, and interaction logic are too tightly coupled
-3. Performance and debug features live too close to product code
-4. Build and package boundaries are not explicit
+1. Renderer, scheduler, cache, and interaction logic are still too tightly coupled
+2. `DataSource`, `FormatAdapter`, `CubeStore`, and `Renderer` are documented seams, not yet concrete modules
+3. The public package install path is defined, but not yet verified from an external consumer application
+4. Fallback renderer and broader browser portability are still absent
 
 ## Architecture Rules
 
@@ -225,3 +290,5 @@ These should be enforced early:
 3. No renderer may parse format-specific bytes
 4. Public API changes require contract updates and fixtures
 5. Every performance claim must have a benchmark path
+6. No large binary payload may cross a thread boundary by accidental copy
+7. Every cache slice must declare owner, budget, and invalidation behavior

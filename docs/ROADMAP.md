@@ -6,6 +6,26 @@ Turn the current prototype into an open-source, analysis-ready viewer platform
 without losing the performance advantages already present in the Rust/WASM +
 worker design.
 
+## Current Stage Assessment (2026-04-17)
+
+CubeScope is no longer at the repository-hygiene-only stage. It is currently in
+a private `0.1.0-alpha.1` local release-candidate state:
+
+- Phase 0 is complete
+- Phase 1 is largely complete at the public-contract level
+- Phase 2 has started, with packaging, test, and benchmark infrastructure in
+  place
+- the remaining release blocker is external verification on GitHub Actions with
+  Node 22 before tagging and opening the repository
+
+What this means in practice:
+
+1. the project is already software-paper-oriented and locally reproducible
+2. the project is not yet beta, because fallback renderer work, HTTP range
+   loading, and deeper internal extractions are still pending
+3. the project is not yet in Phase 3 analysis work, even though spectral probe
+   functionality already exists
+
 ## Phase 0: Repository Hygiene
 
 ### Objectives
@@ -41,15 +61,29 @@ worker design.
 
 - extract Rust ENVI parsing into `envi-core`
 - create typed worker protocol
+- document zero-copy / transferable ownership rules for large buffers
+- define cache budgets, eviction, and invalidation rules
 - separate `viewer core` from `renderers`
 - define `DataSource`, `FormatAdapter`, `CubeStore`, `Renderer`
 - move debug panels to demo app
 - expose stable events and methods only
 
+### Progress Snapshot (2026-04-17)
+
+- completed: demo-only panels moved under `examples/demo/*`
+- completed: wrapper now exposes stable aliases for `header`, `bandschange`, runtime `updateConfig()`, and `unload()`
+- completed: shared worker protocol constants landed in `src/lib/protocol.js`
+- completed: `load({ kind: 'envi-local', headerFile, dataFile })` is now the primary public load entry, with `loadFile(...)` kept as compatibility alias
+- completed: stale worker responses are isolated by `sourceId`, and source-scoped caches reset on source switch
+- completed: contract tests cover source normalization, worker protocol envelopes, and wrapper event aliases
+- completed: browser smoke automation verifies example startup, synthetic fixture load, initial render, and a `performance` event
+- next focus: split `renderer` and `cube store` responsibilities more explicitly without widening the public API
+
 ### Exit criteria
 
 - the viewer works without demo-only panels
 - demo depends only on public interfaces
+- memory and cache contracts are documented, not implicit
 
 ## Phase 2: Packaging and Compatibility
 
@@ -61,11 +95,23 @@ worker design.
 
 ### Tasks
 
-- publish modular packages under `@cubescope/*`
+- keep internal modules package-ready, but publish one browser SDK through the
+  early `0.x` cycle
 - add WebGL fallback renderer
 - add local file and HTTP range data sources
 - add CI for Rust/WASM + package build
 - add browser integration tests
+
+### Progress Snapshot (2026-04-17)
+
+- completed: external release surface has been reduced to one ESM browser SDK, `@cubescope/web`
+- completed: `dist/` is no longer treated as source-of-truth material
+- completed: Rust/WASM rebuilds are scriptable from source and copied into the published runtime asset layout
+- completed: Node 22, npm, Rust/WASM, Playwright, and benchmark commands are documented for reproducibility
+- completed: GitHub Actions workflow exists for Node 22 + Rust/WASM + Playwright
+- pending: install-from-another-app verification of the packaged SDK
+- pending: WebGL fallback renderer
+- pending: HTTP range source
 
 ### Exit criteria
 
@@ -116,6 +162,7 @@ worker design.
 6. worker scaling behavior
 7. WebGPU vs WebGL comparison
 8. JS-only vs Rust/WASM comparison
+9. server-preprocessed tile workflow vs direct local loading
 
 ### Exit criteria
 
@@ -149,23 +196,26 @@ worker design.
 
 ## Release Plan
 
-### `0.1.0-alpha`
+### `0.1.0-alpha.1` (current private alpha candidate)
 
-- docs and branding
-- repo cleanup
-- first cut of package boundaries
+- single `@cubescope/web` SDK identity
+- source-based local ENVI loading
+- typed worker protocol and contract tests
+- reproducible local build, smoke, and benchmark path
+- citation, contribution, issue, and release-checklist shell
 
 ### `0.2.0-alpha`
 
-- core viewer extraction
-- typed worker protocol
-- stable ENVI viewing path
+- explicit install-from-another-app verification
+- GitHub Actions confirmation on Node 22
+- first public tag and repository opening
+- stronger internal split between viewer core and renderer/store responsibilities
 
 ### `0.3.0-beta`
 
-- public SDK
-- demo app split
 - fallback renderer
+- broader browser compatibility story
+- optional HTTP range source
 
 ### `0.4.0-beta`
 
@@ -219,8 +269,7 @@ The current repository already contains the seed of the eventual platform:
 - viewer core and orchestration: `src/lib/hsi-wasm.js`
 - worker runtime: `src/lib/worker.js`
 - Rust/WASM parsing and extraction: `rust/envi_parser_Improved/src/*`
-- example app and debug tooling: `examples/*`, `src/debug-panel.js`,
-  `src/SystemMonitorPanel.js`, `src/PerformanceMonitorRust.js`
+- example app and demo tooling: `examples/*`, `examples/demo/*`
 
 Current strengths:
 
@@ -230,15 +279,17 @@ Current strengths:
 - WebGPU rendering path already exists
 - pixel spectral probing is already possible
 - basic performance instrumentation already exists
+- shared worker protocol constants and source-based load entry already exist
+- reproducible fixture generation, smoke testing, and benchmark commands now exist
+- package metadata, citation metadata, issue templates, and contribution docs are in place
 
 Current liabilities:
 
-- public API and demo behavior are not yet aligned
 - renderer, scheduler, cache, and interaction logic are tightly coupled
-- debug and performance tooling still live too close to core code
-- worker messages are not yet formal typed contracts
-- build reproducibility needs work
-- benchmarks, fixtures, and tests are not yet publication-grade
+- `DataSource`, `FormatAdapter`, `CubeStore`, and `Renderer` are documented seams, not yet first-class modules
+- install-from-another-app verification has not yet been demonstrated
+- WebGL fallback and HTTP range loading are not implemented
+- GitHub Actions on Node 22 still needs to be confirmed before the first public alpha tag
 
 ## Strategic Thesis
 
@@ -298,6 +349,12 @@ Publication readiness requirements:
 - reproducible demo and benchmark instructions
 - at least one documented public dataset or legal test fixture
 
+Priority note:
+
+> Track A should not wait for the full analysis stack. A stable embeddable
+> viewer kernel plus reproducible release practice is enough to justify the
+> first submission.
+
 ### Track B: systems/performance paper
 
 Primary objective:
@@ -319,6 +376,8 @@ Publication readiness requirements:
 - fixed benchmark fixtures
 - repeated runs on declared hardware/browser matrix
 - clear baselines and statistical reporting
+- at least one JS-only reader baseline
+- at least one server-side preprocessed or pyramid-style workflow baseline
 
 ### Track C: domain application paper
 
@@ -355,6 +414,7 @@ Candidate lane:
 Suggested fit:
 
 - `SoftwareX` for the software product itself
+- `JOSS` for a leaner software-focused publication path
 - `Computers & Geosciences` for geoscience-facing computing and visualization
 - later, depending on the scientific story, a domain journal for the
   application paper
@@ -380,6 +440,7 @@ Deliverables:
 - publish contribution guide, citation file, and release policy
 - freeze a minimal viewer API for ENVI local loading
 - create typed worker protocol draft
+- write the memory/data-flow and cache-eviction contract
 - prepare benchmark fixture set and one legal public demo dataset
 - separate demo-only documentation from core package documentation
 
@@ -418,7 +479,7 @@ Goals:
 
 Deliverables:
 
-- package boundary for `@cubescope/web`
+- one stable public browser SDK package
 - browser integration tests
 - benchmark app or benchmark command suite
 - renderer abstraction sufficient for fallback work
@@ -462,6 +523,10 @@ Must have:
 - clear architecture document
 - citable release
 - benchmark commands, even if early
+
+Current status:
+
+- locally satisfied except for the external CI confirmation and public tag/repo switch
 
 ### Gate 2: systems-paper-ready release
 
@@ -546,3 +611,4 @@ When tradeoffs appear, prefer:
 2. reproducible evidence over informal performance claims
 3. public contracts over demo-only convenience
 4. one strong software paper over three weak partially finished papers
+5. one strong public SDK over premature package proliferation

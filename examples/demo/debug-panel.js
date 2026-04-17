@@ -16,6 +16,8 @@ export class DebugPanel {
     #metricsContainer;      // EN: Container for displaying performance metrics. / ZH: 用于显示性能指标的容器。
     #metadataContainer;     // EN: Container for displaying file metadata. / ZH: 用于显示文件元数据的容器。
     #downloadButton;        // EN: Button to download the performance report. / ZH: 用于下载性能报告的按钮。
+    #systemMonitorPanel;    // EN: Optional system monitor data source. / ZH: 可选的系统监控数据源。
+    #performanceChart;      // EN: Optional chart data source. / ZH: 可选的图表数据源。
 
     // EN: Unified storage for all data required for the report.
     // ZH: 用于报告所需所有数据的统一存储。
@@ -30,13 +32,16 @@ export class DebugPanel {
      * ZH: 构建 DebugPanel。
      * @param {EnviViewer} viewer - The EnviViewer instance.
      * @param {HTMLElement} panelElement - The DOM element for the debug panel.
+     * @param {object} reportSources - Optional report data providers.
      */
-    constructor(viewer, panelElement) {
+    constructor(viewer, panelElement, reportSources = {}) {
         if (!viewer || !panelElement) {
             throw new Error("DebugPanel requires a viewer instance and a panel element.");
         }
         this.#viewer = viewer;
         this.#panelElement = panelElement;
+        this.#systemMonitorPanel = reportSources.systemMonitorPanel ?? null;
+        this.#performanceChart = reportSources.performanceChart ?? null;
 
         // EN: Find all control elements within the panel.
         // ZH: 在面板中查找所有控件元素。
@@ -116,7 +121,11 @@ export class DebugPanel {
         // ZH: 监听来自查看器的事件以更新面板。
         this.#viewer.on('metadata', (data) => this.#updateMetadata(data));
         this.#viewer.on('performance', (metric) => this.#updatePerformanceMetrics(metric));
-        this.#viewer.on('loadstart', () => this.#clearAllData());
+        this.#viewer.on('loadstart', () => {
+            this.#clearAllData();
+            this.#systemMonitorPanel?.clearHistoryData();
+            this.#performanceChart?.clearData();
+        });
     }
 
     /**
@@ -228,8 +237,8 @@ export class DebugPanel {
             };
         }
 
-        const systemMonitorHistory = this.#viewer.systemMonitorPanel?.getHistoryData() || [];
-        const performanceChartHistory = this.#viewer.performanceChart?.getHistoryData() || [];
+        const systemMonitorHistory = this.#systemMonitorPanel?.getHistoryData() || [];
+        const performanceChartHistory = this.#performanceChart?.getHistoryData() || [];
 
         const fullReport = {
             reportGeneratedAt: new Date().toISOString(),

@@ -8,6 +8,8 @@
  * WebAssembly (Wasm) 模块、解析 ENVI 文件和渲染图像瓦片，从而保持主 UI 线程的响应能力。
  */
 
+import { WorkerCommand, WorkerResponse, createWorkerMessage } from './protocol.js';
+
 // EN: Wasm functions that will be loaded dynamically.
 // ZH: 将被动态加载的 Wasm 函数。
 let EnviReader;
@@ -25,23 +27,22 @@ self.onmessage = async (e) => {
     // EN: Handles the 'init' message. It dynamically imports the Wasm JavaScript bindings,
     //     fetches the Wasm binary, and initializes the module.
     // ZH: 处理 'init' 消息。动态导入 Wasm 的 JavaScript 绑定，获取 Wasm 二进制文件，并初始化模块。
-    if (type === 'init') {
+    if (type === WorkerCommand.INIT) {
         try {
-            const wasmModule = await import(payload.wasmJsPath);
+            const wasmModule = await import(/* @vite-ignore */ payload.wasmJsPath);
             const wasmBinary = await fetch(payload.wasmWasmPath).then(r => r.arrayBuffer());
-            await wasmModule.default(wasmBinary);
+            await wasmModule.default({ module_or_path: wasmBinary });
             
             EnviReader = wasmModule.EnviReader;
             normalizeBandInPlaceWithStats = wasmModule.normalizeBandInPlaceWithStats;
             calculateStatistics = wasmModule.calculateStatistics;
 
-            self.postMessage({ type: 'init_complete' });
+            self.postMessage(createWorkerMessage(WorkerResponse.INIT_COMPLETE));
         } catch (err) {
             console.error('[Worker] Fatal error during initialization / [Worker] 初始化过程中发生致命错误:', err);
-            self.postMessage({ 
-                type: 'error', 
-                message: `Worker WASM initialization failed / Worker WASM 初始化失败: ${err.message}. Stack: ${err.stack}` 
-            });
+            self.postMessage(createWorkerMessage(WorkerResponse.ERROR, {
+                message: `Worker WASM initialization failed / Worker WASM 初始化失败: ${err.message}. Stack: ${err.stack}`
+            }));
         }
         return;
     }
@@ -49,7 +50,9 @@ self.onmessage = async (e) => {
     // EN: Ensure the Wasm module is initialized before proceeding.
     // ZH: 确保 Wasm 模块已初始化再继续执行。
     if (!EnviReader) {
-        self.postMessage({ type: 'error', message: 'Worker is not yet initialized. / Worker 尚未初始化。' });
+        self.postMessage(createWorkerMessage(WorkerResponse.ERROR, {
+            message: 'Worker is not yet initialized. / Worker 尚未初始化。'
+        }));
         return;
     }
     
@@ -57,35 +60,47 @@ self.onmessage = async (e) => {
         // EN: Handles the 'calculate_stats' message. It triggers the calculation of
         //     global statistics (min/max) for specified bands.
         // ZH: 处理 'calculate_stats' 消息。触发对指定波段的全局统计数据（最小值/最大值）的计算。
-        case 'calculate_stats': {
-            const { hdrBytes, imgFile, bands, header, isInitial } = payload;
+        case WorkerCommand.CALCULATE_STATS: {
+            const { hdrBytes, imgFile, bands, header, isInitial, sourceId } = payload;
             const enviReader = new EnviReader(hdrBytes);
             const stats = await calculateGlobalStats(enviReader, imgFile, bands, header, isInitial);
-            self.postMessage({ type: 'stats_complete', payload: { stats, bands, isInitial } });
+            self.postMessage(createWorkerMessage(WorkerResponse.STATS_COMPLETE, {
+                stats,
+                bands,
+                isInitial,
+                sourceId
+            }));
             break;
         }
         // EN: Handles the 'load_tile' message. It loads the data for a specific tile,
         //     normalizes it, and renders it into an RGBA pixel array.
         // ZH: 处理 'load_tile' 消息。加载特定瓦片的数据，进行归一化处理，并将其渲染为 RGBA 像素阵列。
-        case 'load_tile': {
-            const { hdrBytes, imgFile, tile, bands, globalStats, header } = payload;
+        case WorkerCommand.LOAD_TILE: {
+            const { hdrBytes, imgFile, tile, bands, globalStats, header, sourceId } = payload;
             const enviReader = new EnviReader(hdrBytes);
             try {
                 const result = await loadAndRenderTile(enviReader, imgFile, tile, bands, globalStats, header);
                 if (result) {
                     // EN: Transfer the pixel buffer back to the main thread to avoid copying.
                     // ZH: 将像素缓冲区传回主线程以避免复制。
-                    self.postMessage({ type: 'tile_complete', payload: result }, [result.pixels.buffer]);
+                    self.postMessage(createWorkerMessage(WorkerResponse.TILE_COMPLETE, {
+                        ...result,
+                        sourceId
+                    }), [result.pixels.buffer]);
                 } else {
-                    self.postMessage({ type: 'tile_error', payload: { tile } });
+                    self.postMessage(createWorkerMessage(WorkerResponse.TILE_ERROR, { tile, sourceId }));
                 }
             } catch (error) {
-                self.postMessage({ type: 'tile_error', payload: { tile, message: error.message } });
+                self.postMessage(createWorkerMessage(WorkerResponse.TILE_ERROR, {
+                    tile,
+                    message: error.message,
+                    sourceId
+                }));
             }
             break;
         }
-        case 'get_spectrum': {
-            const { hdrBytes, imgFile, x, y, header, requestId } = payload;
+        case WorkerCommand.GET_SPECTRUM: {
+            const { hdrBytes, imgFile, x, y, header, requestId, sourceId } = payload;
             const enviReader = new EnviReader(hdrBytes);
             try {
                 const TILE_SIZE = 512;
@@ -126,9 +141,19 @@ self.onmessage = async (e) => {
                         spectrum[b] = tile_data && tile_data.length > index ? tile_data[index] : 0;
                     }
                 }
-                self.postMessage({ type: 'spectrum_complete', payload: { requestId, x, y, spectrum: Array.from(spectrum) } });
+                self.postMessage(createWorkerMessage(WorkerResponse.SPECTRUM_COMPLETE, {
+                    requestId,
+                    x,
+                    y,
+                    spectrum: Array.from(spectrum),
+                    sourceId
+                }));
             } catch (err) {
-                self.postMessage({ type: 'spectrum_error', payload: { requestId, message: err.message } });
+                self.postMessage(createWorkerMessage(WorkerResponse.SPECTRUM_ERROR, {
+                    requestId,
+                    message: err.message,
+                    sourceId
+                }));
             }
             break;
         }

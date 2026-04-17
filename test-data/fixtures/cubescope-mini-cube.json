@@ -1,0 +1,14 @@
+{
+  "id": "cubescope-mini-cube",
+  "description": "Synthetic ENVI cube for local smoke tests and benchmark automation.",
+  "dimensions": {
+    "samples": 48,
+    "lines": 48,
+    "bands": 32
+  },
+  "interleave": "bsq",
+  "dataType": "u16",
+  "byteOrder": "lsb",
+  "generationCommand": "node scripts/generate-test-fixtures.mjs",
+  "license": "MIT"
+}

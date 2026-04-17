@@ -1,8 +1,8 @@
 import EnviViewer from '../src/EnviViewer.js';
-import { EChartsPerformanceChart } from '../src/EChartsPerformanceChart.js';
-import { PerformanceMonitorRust } from '../src/PerformanceMonitorRust.js';
-import { SystemMonitorPanel } from '../src/SystemMonitorPanel.js';
-import { DebugPanel } from '../src/debug-panel.js';
+import { EChartsPerformanceChart } from './demo/EChartsPerformanceChart.js';
+import { PerformanceMonitorRust } from './demo/PerformanceMonitorRust.js';
+import { SystemMonitorPanel } from './demo/SystemMonitorPanel.js';
+import { DebugPanel } from './demo/debug-panel.js';
 
 // --- (EN) DOM Element References / (ZH) DOM 元素引用 ---
 const selectFileBtn = document.getElementById('selectFileBtn');
@@ -22,10 +22,27 @@ let bandSwitchCount = 0;
 let spectralChart = null;
 let spectralSeries = [];
 let echartsLib = null;
+const demoState = window.__cubescopeDemoState = {
+    ready: false,
+    viewer: null,
+    header: null,
+    loaded: false,
+    metrics: [],
+    errors: [],
+    loadStartAt: null,
+    headerAt: null,
+    headerParseTime: null,
+    loadEndAt: null,
+};
 
 // --- (EN) Logging Functions / (ZH) 日志函数 ---
 const log = (msg) => {
     console.log(msg);
+    if (demoState.logs) {
+        demoState.logs.push(String(msg));
+    } else {
+        demoState.logs = [String(msg)];
+    }
     if(logDiv) logDiv.innerHTML = msg + '<br>' + logDiv.innerHTML;
 };
 const clearLog = () => { if(logDiv) logDiv.innerHTML = ''; };
@@ -58,6 +75,7 @@ async function main() {
     // EN: Initialize the EnviViewer with paths and configuration.
     // ZH: 使用路径和配置初始化 EnviViewer。
     const viewer = new EnviViewer(viewerContainer, { workerUrl: '/src/lib/worker.js' });
+    demoState.viewer = viewer;
 
     // Performance monitoring setup
     const perfMonitor = new PerformanceMonitorRust();
@@ -65,29 +83,36 @@ async function main() {
     const systemPanel = new SystemMonitorPanel(perfMonitor, 'systemMonitorPanel', viewer);
     systemPanel.setChartCallback((global, baseline, peak) => perfChart.updateData(global, baseline, peak));
 
-    // attach for report usage in DebugPanel
-    viewer.systemMonitorPanel = systemPanel;
-    viewer.performanceChart = perfChart;
-
     const debugPanelEl = document.getElementById('debugPanel');
-    const debugPanel = new DebugPanel(viewer, debugPanelEl);
-    document.getElementById('closeDebugPanelBtn')?.addEventListener('click', () => debugPanel.hide());
+    const debugPanel = new DebugPanel(viewer, debugPanelEl, {
+        systemMonitorPanel: systemPanel,
+        performanceChart: perfChart
+    });
 
     // --- (EN) Viewer Event Listeners / (ZH) 查看器事件监听器 ---
     viewer.on('log', log);
     viewer.on('error', (errMsg) => log(`[Error] ${errMsg}`));
     viewer.on('ready', () => {
+        demoState.ready = true;
         log('Viewer is ready. You can now load files.');
         enableControls();
     });
     viewer.on('loadstart', () => {
+        demoState.header = null;
+        demoState.loaded = false;
+        demoState.metrics = [];
+        demoState.errors = [];
+        demoState.loadStartAt = performance.now();
+        demoState.headerAt = null;
+        demoState.headerParseTime = null;
+        demoState.loadEndAt = null;
         clearLog();
         disableControls('Loading file...');
     });
     viewer.on('ready', () => {
         if (toggleChartBtn) { toggleChartBtn.disabled = false; toggleChartBtn.textContent = 'Show Performance Chart'; }
     });
-    viewer.on('bandschanged', () => {
+    viewer.on('bandschange', () => {
         bandSwitchCount += 1;
         if (bandSwitchCountSpan) bandSwitchCountSpan.textContent = `Band Switch Count: ${bandSwitchCount}`;
     });
@@ -138,10 +163,28 @@ async function main() {
             }
         });
     }
-    viewer.on('headerloaded', (header) => {
+    viewer.on('header', (header) => {
+        demoState.header = header;
+        demoState.headerAt = performance.now();
+        demoState.headerParseTime = demoState.loadStartAt === null
+            ? null
+            : demoState.headerAt - demoState.loadStartAt;
         populateBandSelectors(header.bands, { r: 30, g: 20, b: 10 });
         viewer.setBands({ r: 30, g: 20, b: 10 });
         enableControls();
+    });
+    viewer.on('loadend', () => {
+        demoState.loaded = true;
+        demoState.loadEndAt = performance.now();
+    });
+    viewer.on('performance', (metric) => {
+        demoState.metrics.push({
+            ...metric,
+            capturedAt: performance.now(),
+        });
+    });
+    viewer.on('error', (errMsg) => {
+        demoState.errors.push(String(errMsg));
     });
 
     // --- (EN) Page Interaction Logic / (ZH) 页面交互逻辑 ---
@@ -162,7 +205,11 @@ async function main() {
             }
             if (hdrFile && imgFile) {
                 if(fileNameSpan) fileNameSpan.textContent = `${hdrFile.name}, ${imgFile.name}`;
-                await viewer.loadFile(hdrFile, imgFile);
+                await viewer.load({
+                    kind: 'envi-local',
+                    headerFile: hdrFile,
+                    dataFile: imgFile
+                });
             } else {
                 log('[Error] Invalid file selection. Please ensure one file is a .hdr file.');
             }

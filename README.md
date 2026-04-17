@@ -1,154 +1,204 @@
-# EnviViewer.js
+# CubeScope
 
-`EnviViewer.js` is a high-performance, web-based viewer for ENVI (Environment for Visualizing Images) format hyperspectral and geospatial images. It leverages WebAssembly and Web Workers to achieve smooth parsing, rendering, and analysis of large ENVI files directly in the browser.
+CubeScope is a browser-native, local-first, hardware-accelerated viewer kernel
+for ENVI hyperspectral datasets.
 
-## ✨ Features
+The alpha goal is narrow on purpose:
 
-- **High-Performance Rendering**: Utilizes Rust and WebAssembly for the core parsing engine, enabling high-performance rendering even for large files.
-- **Responsive UI**: Offloads data processing to a Web Worker to ensure a non-blocking main thread and a smooth user experience.
-- **Multi-Band Selection**: Allows users to dynamically select R, G, B bands for false-color display of hyperspectral data.
-- **Event-Driven API**: Provides a clean, event-driven API for easy integration into any web application.
-- **Modular and Extensible**: Designed with a clear and modular structure, making it easy to extend and maintain.
+- load local ENVI `.hdr + data` pairs
+- render pseudo-RGB views in the browser
+- inspect metadata and pixel spectra
+- measure baseline interaction performance without a server stack
 
-## 📦 Installation
+CubeScope is not yet a full remote-sensing workbench. It is the reusable viewer
+core that future analysis plugins and downstream applications can build on.
 
-Install from npm:
+## Alpha Status
 
-```bash
-npm install envi_parser_better
-```
+- npm identity: `@cubescope/web`
+- release target: `0.1.0-alpha.1`
+- repository visibility: private until the alpha acceptance gates pass
+- package format: ESM-only
+- current browser target: WebGPU-capable browsers
+- fallback renderer: not part of this alpha
 
-## 🚀 Usage
+## Verified Quickstart From This Repository
 
-Here's a basic example of how to use `EnviViewer.js` in your project.
+This is the primary reproducible path for the current alpha.
 
-**1. HTML Setup**
+### Prerequisites
 
-First, create a container element in your HTML file where the viewer will be mounted.
+- Node.js `22.x`
+- npm `>=10`
+- Rust stable toolchain managed by `rustup`
+- `wasm32-unknown-unknown` Rust target
+- `wasm-bindgen-cli 0.2.100`
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>EnviViewer.js Example</title>
-    <style>
-        #viewerContainer { width: 800px; height: 600px; border: 1px solid #ccc; }
-    </style>
-</head>
-<body>
-    <div id="viewerContainer"></div>
-    <script type="module" src="./main.js"></script>
-</body>
-</html>
-```
-
-**2. JavaScript Initialization**
-
-Next, in your `main.js` file, import the library, create a new instance, and listen for events.
-
-```javascript
-import EnviViewer from 'envi_parser_better';
-
-const viewerContainer = document.getElementById('viewerContainer');
-
-// Path to the worker and wasm files
-const options = {
-    workerUrl: '/public/envi/worker.js',
-    wasmJsUrl: '/public/envi/pkg/envi_parser.js',
-    wasmWasmUrl: '/public/envi/pkg/envi_parser_bg.wasm'
-};
-
-const viewer = new EnviViewer(viewerContainer, options);
-
-viewer.on('ready', () => {
-    console.log('Viewer is ready!');
-    // Now you can load a file
-});
-
-viewer.on('error', (error) => {
-    console.error('An error occurred:', error);
-});
-
-// To load a file, you need the .hdr file and the corresponding data file
-// viewer.loadFile(hdrFile, dataFile);
-```
-
-## 📚 API
-
-### `new EnviViewer(container, options)`
-
-Creates a new `EnviViewer` instance.
-
-- `container` (HTMLElement): The DOM element to mount the viewer in.
-- `options` (Object): Configuration options.
-    - `workerUrl` (String): The URL to the `worker.js` file.
-    - `wasmJsUrl` (String): The URL to the WASM JS binding file.
-    - `wasmWasmUrl` (String): The URL to the WASM binary file.
-
-### `loadFile(hdrFile, dataFile)`
-
-Loads an ENVI file.
-
-- `hdrFile` (File): The `.hdr` header file.
-- `dataFile` (File): The corresponding data file.
-
-### `setBands(bands)`
-
-Sets the RGB bands to display.
-
-- `bands` (Object): An object with `r`, `g`, and `b` properties, e.g., `{ r: 30, g: 20, b: 10 }`.
-
-### `destroy()`
-
-Destroys the viewer instance and cleans up resources.
-
-## 📢 Events
-
-You can listen for events on the `EnviViewer` instance using the `.on()` method.
-
-- `ready`: Fired when the viewer is initialized and ready to load files.
-- `headerloaded`: Fired when the ENVI header has been parsed. The parsed header data is passed as an argument.
-- `loadstart`: Fired when file loading and processing begins.
-- `loadend`: Fired when the image has been fully rendered.
-- `statechange`: Fired when internal loading state changes. Payload: `{ loading: boolean, message?: string }`.
-- `log`: Fired with internal log messages (string).
-- `error`: Fired when an error occurs (string).
-- `progress`: Fired with background statistics calculation progress `{ type: 'stats_calculation', processed, total, progress }`.
-- `image-clicked`: Fired with clicked pixel coordinates `{ x, y }`.
-- `performance`: Fired with performance metrics `{ name: 'timeToInitialView' | 'bandSwitchTime', value, unit }`.
-
-## 🛠️ Development
-
-To set up the project for local development:
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/envi-viewer.git
-    cd envi-viewer
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-
-3.  **Run the development server:**
-    This will start a Vite dev server and open the example page.
-    ```bash
-    npm run dev
-    ```
-
-## 📦 Build
-
-To build the library for production, run:
+### Setup
 
 ```bash
+npm ci
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.100
+npm run fixtures:generate
 npm run build
+npm run test
 ```
 
-This will generate the necessary files in the `dist` directory.
+### Run the demo
 
-## 📄 License
+```bash
+npm run dev
+```
 
-This project is licensed under the MIT License.
+Then open [`/examples/`](http://127.0.0.1:5173/examples/) in the local Vite
+server and load the synthetic fixture under `test-data/fixtures/`.
+
+## SDK Usage
+
+The public API remains class-based for the alpha.
+
+```js
+import EnviViewer from '../src/EnviViewer.js';
+
+const container = document.getElementById('viewer');
+const viewer = new EnviViewer(container, {
+  workerUrl: '/src/lib/worker.js',
+});
+
+await viewer.init();
+
+await viewer.load({
+  kind: 'envi-local',
+  headerFile: hdrFile,
+  dataFile: imgFile,
+});
+```
+
+### Compatibility Alias
+
+`loadFile(hdrFile, dataFile)` remains available for compatibility, but
+`load({ kind: 'envi-local', headerFile, dataFile })` is the primary interface.
+
+## Runtime Asset Layout For The Published SDK
+
+The alpha package keeps one public browser SDK, plus explicit runtime assets:
+
+- `@cubescope/web`
+- `@cubescope/web/worker.js`
+- `@cubescope/web/pkg/envi_parser.js`
+- `@cubescope/web/pkg/envi_parser_bg.wasm`
+
+For bundlers that support asset URLs, the intended pattern is:
+
+```js
+import EnviViewer from '@cubescope/web';
+import workerUrl from '@cubescope/web/worker.js?url';
+import wasmJsUrl from '@cubescope/web/pkg/envi_parser.js?url';
+import wasmWasmUrl from '@cubescope/web/pkg/envi_parser_bg.wasm?url';
+
+const viewer = new EnviViewer(container, {
+  workerUrl,
+  wasmJsUrl,
+  wasmWasmUrl,
+});
+```
+
+## Stable Alpha API
+
+### Constructor
+
+```js
+const viewer = new EnviViewer(container, options);
+```
+
+`options`:
+
+- `workerUrl?: string`
+- `wasmJsUrl?: string`
+- `wasmWasmUrl?: string`
+- `enableBackgroundStats?: boolean`
+- `enableTilePreloading?: boolean`
+
+### Methods
+
+- `init(): Promise<void>`
+- `load(source): Promise<void>`
+- `loadFile(hdrFile, dataFile): Promise<void>` compatibility alias
+- `unload(): Promise<void>`
+- `setBands({ r, g, b }): void`
+- `updateConfig(partialConfig): void`
+- `getHeader(): object | null`
+- `getSpectralProfile(x, y): Promise<Float32Array | null>`
+- `destroy(): void`
+
+### Stable Events
+
+- `ready`
+- `loadstart`
+- `loadend`
+- `header`
+- `bandschange`
+- `progress`
+- `performance`
+- `error`
+- `image-clicked`
+
+Compatibility aliases retained in the wrapper:
+
+- `headerloaded`
+- `bandschanged`
+
+Additional compatibility passthrough events currently emitted by the wrapper,
+but not frozen as the minimal alpha contract:
+
+- `metadata`
+- `statechange`
+- `log`
+- `destroyed`
+
+## Binary Data Contract
+
+CubeScope treats large binary payloads as an architecture concern:
+
+- metadata and control messages may use normal object passing
+- tiles, spectra, and other large buffers should cross thread boundaries by
+  `Transferable` ownership transfer
+- `SharedArrayBuffer` is optional and not required for correct alpha behavior
+
+## Repository Commands
+
+```bash
+# Rebuild the Rust/WASM runtime
+npm run build:wasm
+
+# Build the SDK bundle, worker bundle, and runtime assets
+npm run build
+
+# Run contract and browser smoke tests
+npm run test
+
+# Capture the early benchmark metrics used by the software-paper appendix
+npm run benchmark
+
+# Run the full local alpha verification chain
+npm run verify:alpha
+```
+
+## Reproducibility And Documentation
+
+- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- API contract: [docs/API.md](docs/API.md)
+- Blueprint: [docs/CUBESCOPE_BLUEPRINT.md](docs/CUBESCOPE_BLUEPRINT.md)
+- Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
+- Reproducibility steps: [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)
+- Alpha release checklist: [docs/ALPHA_RELEASE_CHECKLIST.md](docs/ALPHA_RELEASE_CHECKLIST.md)
+
+## Citation
+
+If CubeScope contributes to your work, cite the software release once the alpha
+tag is published. The citation metadata lives in [`CITATION.cff`](CITATION.cff).
+
+## License
+
+CubeScope is released under the MIT License. See [LICENSE](LICENSE).

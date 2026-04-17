@@ -172,17 +172,6 @@ function isLikeNone(x) {
     return x === undefined || x === null;
 }
 
-export function start() {
-    wasm.start();
-}
-
-/**
- * @param {boolean} enabled
- */
-export function set_logging_enabled(enabled) {
-    wasm.set_logging_enabled(enabled);
-}
-
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
@@ -213,20 +202,6 @@ function passArrayF32ToWasm0(arg, malloc) {
 }
 /**
  * @param {Float32Array} data
- * @param {number} low_percent
- * @param {number} high_percent
- */
-export function normalizeBandInPlace(data, low_percent, high_percent) {
-    var ptr0 = passArrayF32ToWasm0(data, wasm.__wbindgen_malloc);
-    var len0 = WASM_VECTOR_LEN;
-    const ret = wasm.normalizeBandInPlace(ptr0, len0, data, low_percent, high_percent);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
-/**
- * @param {Float32Array} data
  * @param {number} min_val
  * @param {number} max_val
  */
@@ -237,6 +212,10 @@ export function normalizeBandInPlaceWithStats(data, min_val, max_val) {
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
+}
+
+export function start() {
+    wasm.start();
 }
 
 /**
@@ -251,6 +230,27 @@ export function calculateStatistics(data) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return BandStats.__wrap(ret[0]);
+}
+
+/**
+ * @param {Float32Array} data
+ * @param {number} low_percent
+ * @param {number} high_percent
+ */
+export function normalizeBandInPlace(data, low_percent, high_percent) {
+    var ptr0 = passArrayF32ToWasm0(data, wasm.__wbindgen_malloc);
+    var len0 = WASM_VECTOR_LEN;
+    const ret = wasm.normalizeBandInPlace(ptr0, len0, data, low_percent, high_percent);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @param {boolean} enabled
+ */
+export function set_logging_enabled(enabled) {
+    wasm.set_logging_enabled(enabled);
 }
 
 /**
@@ -358,39 +358,11 @@ export class EnviReader {
         wasm.__wbg_envireader_free(ptr, 0);
     }
     /**
-     * @param {Uint8Array} header_content
+     * @returns {Interleave}
      */
-    constructor(header_content) {
-        const ptr0 = passArray8ToWasm0(header_content, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_new(ptr0, len0);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        this.__wbg_ptr = ret[0] >>> 0;
-        EnviReaderFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * @returns {number}
-     */
-    get samples() {
-        const ret = wasm.envireader_samples(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    get lines() {
-        const ret = wasm.envireader_lines(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    get bands() {
-        const ret = wasm.envireader_bands(this.__wbg_ptr);
-        return ret >>> 0;
+    get interleave() {
+        const ret = wasm.envireader_interleave(this.__wbg_ptr);
+        return ret;
     }
     /**
      * @returns {number}
@@ -407,17 +379,57 @@ export class EnviReader {
         return ret >>> 0;
     }
     /**
-     * @returns {Interleave}
+     * @param {Uint8Array} chunk_data
+     * @param {number} chunk_start_offset_in_file
+     * @param {number} band_index
+     * @param {number} tile_x_index
+     * @param {number} tile_y_index
+     * @param {number} tile_width
+     * @param {number} tile_height
+     * @returns {Float32Array}
      */
-    get interleave() {
-        const ret = wasm.envireader_interleave(this.__wbg_ptr);
-        return ret;
+    extractBilTileRaw(chunk_data, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractBilTileRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
     /**
-     * @returns {any}
+     * @param {Uint8Array} chunk_data
+     * @param {number} chunk_start_offset_in_file
+     * @param {number} band_index
+     * @param {number} tile_x_index
+     * @param {number} tile_y_index
+     * @param {number} tile_width
+     * @param {number} tile_height
+     * @returns {Float32Array}
      */
-    getHeaderAsJsObject() {
-        const ret = wasm.envireader_getHeaderAsJsObject(this.__wbg_ptr);
+    extractBipTileRaw(chunk_data, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractBipTileRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @param {number} chunk_start_offset_in_file
+     * @param {number} band_index
+     * @param {number} tile_x_index
+     * @param {number} tile_y_index
+     * @param {number} tile_width
+     * @param {number} tile_height
+     * @returns {Float32Array}
+     */
+    extractBsqTileRaw(chunk_data, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractBsqTileRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -450,6 +462,108 @@ export class EnviReader {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
+     * @returns {any}
+     */
+    getHeaderAsJsObject() {
+        const ret = wasm.envireader_getHeaderAsJsObject(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @returns {Float32Array}
+     */
+    extractRawFromBsqChunk(chunk_data) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractRawFromBsqChunk(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @param {number} chunk_start_offset_in_file
+     * @param {any} bands_js
+     * @param {number} tile_x_index
+     * @param {number} tile_y_index
+     * @param {number} tile_width
+     * @param {number} tile_height
+     * @returns {Array<any>}
+     */
+    extractBipTileForBandsRaw(chunk_data, chunk_start_offset_in_file, bands_js, tile_x_index, tile_y_index, tile_width, tile_height) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractBipTileForBandsRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, bands_js, tile_x_index, tile_y_index, tile_width, tile_height);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @param {number} r_idx
+     * @param {number} g_idx
+     * @param {number} b_idx
+     * @returns {object}
+     */
+    extractRawRgbFromBilChunk(chunk_data, r_idx, g_idx, b_idx) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractRawRgbFromBilChunk(this.__wbg_ptr, ptr0, len0, r_idx, g_idx, b_idx);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @param {number} r_idx
+     * @param {number} g_idx
+     * @param {number} b_idx
+     * @returns {object}
+     */
+    extractRawRgbFromBipChunk(chunk_data, r_idx, g_idx, b_idx) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractRawRgbFromBipChunk(this.__wbg_ptr, ptr0, len0, r_idx, g_idx, b_idx);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @param {number} band_idx
+     * @returns {Float32Array}
+     */
+    extractRawBandFromBilChunk(chunk_data, band_idx) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractRawBandFromBilChunk(this.__wbg_ptr, ptr0, len0, band_idx);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} chunk_data
+     * @param {number} band_idx
+     * @returns {Float32Array}
+     */
+    extractRawBandFromBipChunk(chunk_data, band_idx) {
+        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.envireader_extractRawBandFromBipChunk(this.__wbg_ptr, ptr0, len0, band_idx);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * [新增] 提取并返回指定坐标点的高光谱曲线，并附带波长信息
      *
      * @param {Uint8Array} chunk_data - 包含目标像素的二进制数据块。
@@ -474,153 +588,39 @@ export class EnviReader {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
-     * @param {Uint8Array} chunk_data
-     * @returns {Float32Array}
+     * @param {Uint8Array} header_content
      */
-    extractRawFromBsqChunk(chunk_data) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
+    constructor(header_content) {
+        const ptr0 = passArray8ToWasm0(header_content, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractRawFromBsqChunk(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.envireader_new(ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
-        return takeFromExternrefTable0(ret[0]);
+        this.__wbg_ptr = ret[0] >>> 0;
+        EnviReaderFinalization.register(this, this.__wbg_ptr, this);
+        return this;
     }
     /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} r_idx
-     * @param {number} g_idx
-     * @param {number} b_idx
-     * @returns {object}
+     * @returns {number}
      */
-    extractRawRgbFromBipChunk(chunk_data, r_idx, g_idx, b_idx) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractRawRgbFromBipChunk(this.__wbg_ptr, ptr0, len0, r_idx, g_idx, b_idx);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+    get bands() {
+        const ret = wasm.envireader_bands(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} r_idx
-     * @param {number} g_idx
-     * @param {number} b_idx
-     * @returns {object}
+     * @returns {number}
      */
-    extractRawRgbFromBilChunk(chunk_data, r_idx, g_idx, b_idx) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractRawRgbFromBilChunk(this.__wbg_ptr, ptr0, len0, r_idx, g_idx, b_idx);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+    get lines() {
+        const ret = wasm.envireader_lines(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} band_idx
-     * @returns {Float32Array}
+     * @returns {number}
      */
-    extractRawBandFromBipChunk(chunk_data, band_idx) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractRawBandFromBipChunk(this.__wbg_ptr, ptr0, len0, band_idx);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} band_idx
-     * @returns {Float32Array}
-     */
-    extractRawBandFromBilChunk(chunk_data, band_idx) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractRawBandFromBilChunk(this.__wbg_ptr, ptr0, len0, band_idx);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} chunk_start_offset_in_file
-     * @param {number} band_index
-     * @param {number} tile_x_index
-     * @param {number} tile_y_index
-     * @param {number} tile_width
-     * @param {number} tile_height
-     * @returns {Float32Array}
-     */
-    extractBilTileRaw(chunk_data, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractBilTileRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} chunk_start_offset_in_file
-     * @param {number} band_index
-     * @param {number} tile_x_index
-     * @param {number} tile_y_index
-     * @param {number} tile_width
-     * @param {number} tile_height
-     * @returns {Float32Array}
-     */
-    extractBsqTileRaw(chunk_data, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractBsqTileRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} chunk_start_offset_in_file
-     * @param {number} band_index
-     * @param {number} tile_x_index
-     * @param {number} tile_y_index
-     * @param {number} tile_width
-     * @param {number} tile_height
-     * @returns {Float32Array}
-     */
-    extractBipTileRaw(chunk_data, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractBipTileRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, band_index, tile_x_index, tile_y_index, tile_width, tile_height);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} chunk_data
-     * @param {number} chunk_start_offset_in_file
-     * @param {any} bands_js
-     * @param {number} tile_x_index
-     * @param {number} tile_y_index
-     * @param {number} tile_width
-     * @param {number} tile_height
-     * @returns {Array<any>}
-     */
-    extractBipTileForBandsRaw(chunk_data, chunk_start_offset_in_file, bands_js, tile_x_index, tile_y_index, tile_width, tile_height) {
-        const ptr0 = passArray8ToWasm0(chunk_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.envireader_extractBipTileForBandsRaw(this.__wbg_ptr, ptr0, len0, chunk_start_offset_in_file, bands_js, tile_x_index, tile_y_index, tile_width, tile_height);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+    get samples() {
+        const ret = wasm.envireader_samples(this.__wbg_ptr);
+        return ret >>> 0;
     }
 }
 

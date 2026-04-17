@@ -8,6 +8,9 @@
  * @classdesc Main class to control the ENVI file rendering canvas.
  */
 
+import { normalizeLoadSource } from './load-source.js';
+import { ProgressType, WorkerCommand, WorkerResponse, createWorkerMessage } from './protocol.js';
+
 // A simple, self-contained event emitter class to handle decoupling.
 class EventEmitter {
     constructor() { this.events = {}; }
@@ -59,6 +62,7 @@ export class EnviViewer extends EventEmitter {
     #totalBandsForStats = 0;
     #isWaitingForStats = false; 
     #pendingSpectrumResolvers = new Map();
+    #activeSourceId = 0;
 
     // Transition animation state
     #isTransitioning = false;
@@ -119,6 +123,14 @@ export class EnviViewer extends EventEmitter {
         return this.#hdrBytes;
     }
 
+    unload() {
+        this.emit('log', '卸载当前数据源...');
+        this.#activeSourceId += 1;
+        this.#resetSourceState();
+        this.#clearCanvas();
+        this.emit('statechange', { loading: false });
+    }
+
     async getSpectralProfile(x, y) {
         if (!this.#header || !this.#imgFile || !this.#hdrBytes) return null;
         const requestId = `spec_${Date.now()}_${Math.random()}`;
@@ -126,7 +138,15 @@ export class EnviViewer extends EventEmitter {
             const dispatch = () => {
                 if (this.#idleWorkers.length > 0) {
                     const worker = this.#idleWorkers.pop();
-                    worker.postMessage({ type: 'get_spectrum', payload: { hdrBytes: this.#hdrBytes, imgFile: this.#imgFile, x, y, header: this.#header, requestId } });
+                    worker.postMessage(createWorkerMessage(WorkerCommand.GET_SPECTRUM, {
+                        hdrBytes: this.#hdrBytes,
+                        imgFile: this.#imgFile,
+                        x,
+                        y,
+                        header: this.#header,
+                        requestId,
+                        sourceId: this.#activeSourceId
+                    }));
                     this.#pendingSpectrumResolvers.set(requestId, { resolve, reject });
                 } else {
                     setTimeout(dispatch, 200);
@@ -140,11 +160,11 @@ export class EnviViewer extends EventEmitter {
     async init() {
         this.emit('log', 'Library initialization started...');
         try {
-            this.#wasmModule = await import(this.#wasmPaths.wasmJsPath);
-            const wasmModule = await import(this.#wasmPaths.wasmJsPath);
+            const wasmModule = await import(/* @vite-ignore */ this.#wasmPaths.wasmJsPath);
+            this.#wasmModule = wasmModule;
             const wasmPath = new URL(this.#wasmPaths.wasmWasmPath, import.meta.url).href;
             this.emit('log', wasmPath);
-            await wasmModule.default(wasmPath);
+            await wasmModule.default({ module_or_path: wasmPath });
             wasmModule.set_logging_enabled(false);
             this.emit('log', 'Main thread WASM initialization completed.');
             await this.#initWebGPU();
@@ -170,31 +190,29 @@ export class EnviViewer extends EventEmitter {
         }
         return new this.#wasmModule.EnviReader(this.#hdrBytes);
     }
-    async load(hdrFile, imgFile) {
-        if (!hdrFile || !imgFile) {
-            this.emit('error', '必须同时提供 HDR 和 图像文件。');
+    async load(source, legacyDataFile) {
+        let loadSource;
+        try {
+            loadSource = normalizeLoadSource(source, legacyDataFile);
+        } catch (error) {
+            this.emit('error', error.message);
             return;
         }
+
+        const { headerFile, dataFile } = loadSource;
+        this.#activeSourceId += 1;
+        this.#resetSourceState();
         this.emit('loadstart');
-        this.emit('log', `开始加载: ${hdrFile.name}, ${imgFile.name}`);
+        this.emit('log', `开始加载: ${headerFile.name}, ${dataFile.name}`);
         
         this.#performance.loadStartTime = performance.now();
         this.#performance.isInitialLoading = true;
         this.#performance.initialVisibleTiles.clear();
         this.#performance.completedInitialTiles.clear();
-        
-        this.#tileCache.clear();
-        this.#globalStats = null;
-        this.#bandStatsCache.clear();
-        this.#backgroundStatsQueue = [];
-        this.#preloadQueue = [];
-        this.#isPreloading = false;
-        this.#scale = 1.0;
-        this.#offsetX = 0.0;
-        this.#offsetY = 0.0;
         try {
-            this.#hdrBytes = new Uint8Array(await hdrFile.arrayBuffer());
-            const { EnviReader } = await import(this.#wasmPaths.wasmJsPath);
+            this.#hdrBytes = new Uint8Array(await headerFile.arrayBuffer());
+            const { EnviReader } = this.#wasmModule
+                ?? await import(/* @vite-ignore */ this.#wasmPaths.wasmJsPath);
             const enviReader = new EnviReader(this.#hdrBytes);
             this.#header = enviReader.getHeaderAsJsObject();
             this.#header.interleave = this.#header.interleave.toLowerCase();
@@ -203,8 +221,8 @@ export class EnviViewer extends EventEmitter {
             this.emit('log', `HDR 解析成功。 格式(Interleave): ${this.#header.interleave}`);
 
             this.emit('metadata', {
-                fileName: imgFile.name,
-                fileSize: imgFile.size, // 文件大小 (bytes)
+                fileName: dataFile.name,
+                fileSize: dataFile.size, // 文件大小 (bytes)
                 dimensions: {
                     samples: this.#header.samples,
                     lines: this.#header.lines,
@@ -218,7 +236,7 @@ export class EnviViewer extends EventEmitter {
             });
 
             this.#resizeCanvas();
-            this.#imgFile = imgFile;
+            this.#imgFile = dataFile;
             this.emit('log', "正在为初始视图计算统计值...");
             this.emit('statechange', { loading: true, message: '计算统计值...' });
             const initialBands = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
@@ -256,17 +274,14 @@ export class EnviViewer extends EventEmitter {
 
     destroy() {
         this.emit('log', '销毁 EnviViewer 实例...');
-        this.#isPreloading = false;
-        this.#preloadQueue = [];
-        this.#tileRequestQueue.clear();
+        this.#activeSourceId += 1;
+        this.#resetSourceState();
         this.#detachEventListeners();
         this.#idleWorkers.forEach(worker => worker.terminate());
         this.#idleWorkers = [];
         this.#device = null;
         this.#context = null;
         this.#pipeline = null;
-        this.#tileCache.clear();
-        this.#bandStatsCache.clear();
         this.emit('destroyed');
         this.events = {};
     }
@@ -285,42 +300,6 @@ export class EnviViewer extends EventEmitter {
         }
     }
 
-    // --- Public Methods to Expose Internal State ---
-    
-    // 获取是否有活跃的瓦片请求
-    get hasActiveTileRequests() {
-        return this.#tileRequestQueue.size > 0;
-    }
-    
-    // 获取是否有后台统计任务
-    get hasBackgroundStatsTasks() {
-        return this.#backgroundStatsQueue.length > 0;
-    }
-    
-    // 获取是否有预加载任务
-    get hasPreloadTasks() {
-        return this.#preloadQueue.length > 0;
-    }
-    
-    // 获取是否正在进行波段切换
-    get isTransitioning() {
-        return this.#isTransitioning;
-    }
-    
-    // 获取是否在等待统计值
-    get isWaitingForStats() {
-        return this.#isWaitingForStats;
-    }
-    
-    // 获取空闲Worker数量
-    get idleWorkerCount() {
-        return this.#idleWorkers.length;
-    }
-    
-    // 获取总Worker数量
-    get totalWorkerCount() {
-        return this.#MAX_WORKERS;
-    }
     // 在 EnviViewer 类中添加这个新方法
     #handleCanvasClick = (e) => {
         // 如果头文件还没加载，无法进行任何计算
@@ -469,15 +448,25 @@ export class EnviViewer extends EventEmitter {
             const worker = new Worker(cacheBustingUrl, { type: 'module' });
             const promise = new Promise((resolve, reject) => {
                 worker.onmessage = (e) => {
-                    if (e.data.type === 'init_complete') { this.#idleWorkers.push(worker); resolve(); }
-                    else if (e.data.type === 'error') { this.emit('log', `Worker 初始化错误: ${e.data.message}`); reject(new Error(e.data.message)); }
+                    if (e.data.type === WorkerResponse.INIT_COMPLETE) {
+                        this.#idleWorkers.push(worker);
+                        resolve();
+                    }
+                    else if (e.data.type === WorkerResponse.ERROR) {
+                        const message = e.data.payload?.message ?? e.data.message ?? 'Unknown worker initialization error.';
+                        this.emit('log', `Worker 初始化错误: ${message}`);
+                        reject(new Error(message));
+                    }
                     else { this.#handleWorkerMessage(e); }
                 };
                 worker.onerror = (err) => { this.emit('log', `A worker encountered a fatal error: ${err.message}`); reject(err); };
             });
             const absoluteWasmJsPath = new URL(this.#wasmPaths.wasmJsPath, import.meta.url).href;
             const absoluteWasmWasmPath = new URL(this.#wasmPaths.wasmWasmPath, import.meta.url).href;
-            worker.postMessage({ type: 'init', payload: { wasmJsPath: absoluteWasmJsPath, wasmWasmPath: absoluteWasmWasmPath }});
+            worker.postMessage(createWorkerMessage(WorkerCommand.INIT, {
+                wasmJsPath: absoluteWasmJsPath,
+                wasmWasmPath: absoluteWasmWasmPath
+            }));
             initPromises.push(promise);
         }
         try {
@@ -493,7 +482,15 @@ export class EnviViewer extends EventEmitter {
     #handleWorkerMessage(e) {
         const { type, payload } = e.data;
         const worker = e.target;
-        if (type === 'stats_complete') {
+        if (payload?.sourceId !== undefined && payload.sourceId !== this.#activeSourceId) {
+            this.#idleWorkers.push(worker);
+            this.#processTileRequestQueue();
+            this.#processBackgroundStatsQueue();
+            this.#processPreloadQueue();
+            return;
+        }
+
+        if (type === WorkerResponse.STATS_COMPLETE) {
             const { stats, bands, isInitial } = payload;
             for (const band of bands) { if (stats[band]) { this.#bandStatsCache.set(band, stats[band]); } }
             this.#idleWorkers.push(worker);
@@ -526,7 +523,7 @@ export class EnviViewer extends EventEmitter {
             }
             this.#processBackgroundStatsQueue();
         } 
-        else if (type === 'tile_complete') {
+        else if (type === WorkerResponse.TILE_COMPLETE) {
             if (!payload || !payload.bands) {
                 this.emit('log', `[ERROR] Received malformed tile payload; discarded. Payload: ${JSON.stringify(payload)}`);
                 this.#idleWorkers.push(worker); this.#processTileRequestQueue(); this.#processPreloadQueue(); return; 
@@ -577,7 +574,7 @@ export class EnviViewer extends EventEmitter {
             this.#processTileRequestQueue();
             this.#processPreloadQueue();
         } 
-        else if (type === 'spectrum_complete') {
+        else if (type === WorkerResponse.SPECTRUM_COMPLETE) {
             const { requestId, spectrum } = payload;
             const resolver = this.#pendingSpectrumResolvers.get(requestId);
             if (resolver) {
@@ -586,7 +583,7 @@ export class EnviViewer extends EventEmitter {
             }
             this.#idleWorkers.push(worker);
         }
-        else if (type === 'spectrum_error') {
+        else if (type === WorkerResponse.SPECTRUM_ERROR) {
             const { requestId, message } = payload;
             const resolver = this.#pendingSpectrumResolvers.get(requestId);
             if (resolver) {
@@ -595,7 +592,7 @@ export class EnviViewer extends EventEmitter {
             }
             this.#idleWorkers.push(worker);
         }
-        else if (type === 'tile_error') {
+        else if (type === WorkerResponse.TILE_ERROR) {
             if (this.#isTransitioning) {
                  this.#transitionTileCounter--;
                  if (this.#transitionTileCounter === 0) {
@@ -618,12 +615,24 @@ export class EnviViewer extends EventEmitter {
             this.#processTileRequestQueue();
             this.#processPreloadQueue();
         }
+        else if (type === WorkerResponse.ERROR) {
+            const message = payload?.message ?? e.data.message ?? 'Unknown worker error';
+            this.emit('error', message);
+            this.#idleWorkers.push(worker);
+        }
     }
 
     #dispatchStatsCalculation(bands, isInitial = false) {
         if (this.#idleWorkers.length > 0) {
             const worker = this.#idleWorkers.pop();
-            worker.postMessage({ type: 'calculate_stats', payload: { hdrBytes: this.#hdrBytes, imgFile: this.#imgFile, bands, header: this.#header, isInitial } });
+            worker.postMessage(createWorkerMessage(WorkerCommand.CALCULATE_STATS, {
+                hdrBytes: this.#hdrBytes,
+                imgFile: this.#imgFile,
+                bands,
+                header: this.#header,
+                isInitial,
+                sourceId: this.#activeSourceId
+            }));
         } else {
             if (!isInitial) {
                 this.emit('log', "No idle worker; task queued for background.");
@@ -653,7 +662,15 @@ export class EnviViewer extends EventEmitter {
             if (worker) {
                  const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
                 console.log(`[主线程-1-发送任务] (过渡) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-                worker.postMessage({ type: 'load_tile', payload: { hdrBytes: this.#hdrBytes, imgFile: this.#imgFile, tile, bands: bandsPayload, globalStats: this.#globalStats, header: this.#header } });
+                worker.postMessage(createWorkerMessage(WorkerCommand.LOAD_TILE, {
+                    hdrBytes: this.#hdrBytes,
+                    imgFile: this.#imgFile,
+                    tile,
+                    bands: bandsPayload,
+                    globalStats: this.#globalStats,
+                    header: this.#header,
+                    sourceId: this.#activeSourceId
+                }));
             } else {
                 this.#transitionTileCounter--; 
                 this.#tileRequestQueue.set(`${tile.x},${tile.y}`, { tile });
@@ -690,10 +707,22 @@ export class EnviViewer extends EventEmitter {
             const remaining = this.#backgroundStatsQueue.length - 1;
             const processed = total - remaining;
             const progressPercent = total > 0 ? (processed / total) * 100 : 0;
-            this.emit('progress', { type: 'stats_calculation', processed, total, progress: progressPercent });
+            this.emit('progress', {
+                type: ProgressType.STATS_CALCULATION,
+                processed,
+                total,
+                progress: progressPercent
+            });
             const worker = this.#idleWorkers.pop();
             const bandToProcess = this.#backgroundStatsQueue.shift();
-            worker.postMessage({ type: 'calculate_stats', payload: { hdrBytes: this.#hdrBytes, imgFile: this.#imgFile, bands: [bandToProcess], header: this.#header, isInitial: false } });
+            worker.postMessage(createWorkerMessage(WorkerCommand.CALCULATE_STATS, {
+                hdrBytes: this.#hdrBytes,
+                imgFile: this.#imgFile,
+                bands: [bandToProcess],
+                header: this.#header,
+                isInitial: false,
+                sourceId: this.#activeSourceId
+            }));
         }
     }
 
@@ -731,7 +760,7 @@ export class EnviViewer extends EventEmitter {
         const uniformBuffer = this.#device.createBuffer({ size: uniformData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
         this.#device.queue.writeBuffer(uniformBuffer, 0, uniformData);
         const bindGroup = this.#device.createBindGroup({ layout: this.#pipeline.getBindGroupLayout(0), entries: [ { binding: 0, resource: this.#sampler }, { binding: 1, resource: tileTexture.createView() }, { binding: 2, resource: { buffer: uniformBuffer } } ] });
-        return { bindGroup, uniformBuffer, uniformData };
+        return { bindGroup, texture: tileTexture, uniformBuffer, uniformData };
     }
     
     #processTileRequestQueue() {
@@ -743,7 +772,15 @@ export class EnviViewer extends EventEmitter {
             const worker = this.#idleWorkers.pop();
             const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
             console.log(`[主线程-1-发送任务] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-            worker.postMessage({ type: 'load_tile', payload: { hdrBytes: this.#hdrBytes, imgFile: this.#imgFile, tile, bands: bandsPayload, globalStats: this.#globalStats, header: this.#header } });
+            worker.postMessage(createWorkerMessage(WorkerCommand.LOAD_TILE, {
+                hdrBytes: this.#hdrBytes,
+                imgFile: this.#imgFile,
+                tile,
+                bands: bandsPayload,
+                globalStats: this.#globalStats,
+                header: this.#header,
+                sourceId: this.#activeSourceId
+            }));
         }
     }
 
@@ -852,13 +889,98 @@ export class EnviViewer extends EventEmitter {
                 const worker = this.#idleWorkers.pop();
                 const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
                  console.log(`[主线程-1-发送任务] (预加载) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-                worker.postMessage({ type: 'load_tile', payload: { hdrBytes: this.#hdrBytes, imgFile: this.#imgFile, tile, bands: bandsPayload, globalStats: this.#globalStats, header: this.#header } });
+                worker.postMessage(createWorkerMessage(WorkerCommand.LOAD_TILE, {
+                    hdrBytes: this.#hdrBytes,
+                    imgFile: this.#imgFile,
+                    tile,
+                    bands: bandsPayload,
+                    globalStats: this.#globalStats,
+                    header: this.#header,
+                    sourceId: this.#activeSourceId
+                }));
             }
         }
         if (this.#preloadQueue.length === 0 && this.#isPreloading) {
             this.#isPreloading = false;
             this.emit('log', "All tile preloads completed.");
         }
+    }
+
+    #clearCanvas() {
+        if (!this.#device || !this.#context) {
+            return;
+        }
+
+        const commandEncoder = this.#device.createCommandEncoder();
+        const textureView = this.#context.getCurrentTexture().createView();
+        const renderPass = commandEncoder.beginRenderPass({
+            colorAttachments: [{
+                view: textureView,
+                loadOp: 'clear',
+                storeOp: 'store',
+                clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            }],
+        });
+        renderPass.end();
+        this.#device.queue.submit([commandEncoder.finish()]);
+    }
+
+    #releaseTileResource(resource) {
+        if (!resource || resource === this.#TILE_RENDERING_KEY) {
+            return;
+        }
+
+        resource.uniformBuffer?.destroy?.();
+        resource.texture?.destroy?.();
+    }
+
+    #clearTileCache(cache) {
+        if (!cache) {
+            return;
+        }
+
+        for (const resource of cache.values()) {
+            this.#releaseTileResource(resource);
+        }
+
+        cache.clear();
+    }
+
+    #rejectPendingSpectrumRequests(message) {
+        for (const resolver of this.#pendingSpectrumResolvers.values()) {
+            resolver.reject(new Error(message));
+        }
+        this.#pendingSpectrumResolvers.clear();
+    }
+
+    #resetSourceState() {
+        this.#isPreloading = false;
+        this.#isWaitingForStats = false;
+        this.#isTransitioning = false;
+        this.#transitionTileCounter = 0;
+        this.#preloadQueue = [];
+        this.#tileRequestQueue.clear();
+        this.#backgroundStatsQueue = [];
+        this.#totalBandsForStats = 0;
+        this.#rejectPendingSpectrumRequests('Viewer source unloaded.');
+        this.#clearTileCache(this.#tileCache);
+        this.#clearTileCache(this.#newTileCache);
+        this.#newTileCache = null;
+        this.#bandStatsCache.clear();
+        this.#globalStats = null;
+        this.#hdrBytes = null;
+        this.#imgFile = null;
+        this.#header = null;
+        this.#performance = {
+            loadStartTime: 0,
+            bandSwitchStartTime: 0,
+            isInitialLoading: false,
+            initialVisibleTiles: new Set(),
+            completedInitialTiles: new Set(),
+        };
+        this.#scale = 1.0;
+        this.#offsetX = 0.0;
+        this.#offsetY = 0.0;
     }
 
     #getAspectRatioCorrection() {

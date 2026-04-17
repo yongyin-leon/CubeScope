@@ -1,5 +1,10 @@
 .DS_Store
+coverage/
+dist/
 node_modules/
 npm-debug.log*
+output/
+playwright-report/
+test-results/
 
 rust/**/target/

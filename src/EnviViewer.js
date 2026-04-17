@@ -8,6 +8,7 @@
  */
 
 import { EnviViewer as InternalEnviViewer } from './lib/hsi-wasm.js';
+import { LoadSourceKind, normalizeLoadSource } from './lib/load-source.js';
 
 /**
  * EN: A simple event emitter class.
@@ -99,9 +100,17 @@ export default class EnviViewer extends EventEmitter {
         this.#internalViewer.on('headerloaded', (header) => {
             this.#header = header;
             this.emit('headerloaded', header);
+            this.emit('header', header);
+        });
+        this.#internalViewer.on('metadata', (data) => this.emit('metadata', data));
+        this.#internalViewer.on('bandschanged', (bands) => {
+            this.emit('bandschanged', bands);
+            this.emit('bandschange', bands);
         });
         this.#internalViewer.on('progress', (data) => this.emit('progress', data));
         this.#internalViewer.on('image-clicked', (data) => this.emit('image-clicked', data));
+        this.#internalViewer.on('performance', (data) => this.emit('performance', data));
+        this.#internalViewer.on('destroyed', () => this.emit('destroyed'));
     }
 
     /**
@@ -114,17 +123,39 @@ export default class EnviViewer extends EventEmitter {
     }
 
     /**
-     * EN: Loads an ENVI file from a .hdr and a data file.
-     * ZH: 从 .hdr 和数据文件加载 ENVI 文件。
+     * EN: Loads an ENVI source through the stable source-based API.
+     * ZH: 通过稳定的 source API 加载 ENVI 数据源。
+     * @param {{kind: 'envi-local', headerFile: File, dataFile: File}} source The load source definition.
+     * @returns {Promise<void>}
+     */
+    async load(source) {
+        const normalizedSource = normalizeLoadSource(source);
+        await this.#internalViewer.load(normalizedSource);
+    }
+
+    /**
+     * EN: Legacy convenience alias for loading a local ENVI file pair.
+     * ZH: 为本地 ENVI 文件对保留的兼容性便捷别名。
      * @param {File} hdrFile The .hdr file.
      * @param {File} dataFile The corresponding data file (e.g., .dat, .img, .bil).
      * @returns {Promise<void>}
      */
     async loadFile(hdrFile, dataFile) {
-        if (!hdrFile || !dataFile) {
-            throw new Error('Both a .hdr file and a data file must be provided.');
-        }
-        await this.#internalViewer.load(hdrFile, dataFile);
+        await this.load({
+            kind: LoadSourceKind.ENVI_LOCAL,
+            headerFile: hdrFile,
+            dataFile
+        });
+    }
+
+    /**
+     * EN: Unloads the active source and releases source-scoped resources.
+     * ZH: 卸载当前数据源并释放与数据源绑定的资源。
+     * @returns {Promise<void>}
+     */
+    async unload() {
+        this.#header = null;
+        await this.#internalViewer.unload();
     }
 
     /**
@@ -134,6 +165,15 @@ export default class EnviViewer extends EventEmitter {
      */
     setBands(bands) {
         this.#internalViewer.setBands(bands);
+    }
+
+    /**
+     * EN: Updates runtime viewer configuration using the stable wrapper surface.
+     * ZH: 通过稳定的包装层接口更新运行时配置。
+     * @param {object} config Partial runtime configuration.
+     */
+    updateConfig(config = {}) {
+        this.#internalViewer.updateConfig(config);
     }
 
     /**
@@ -161,6 +201,7 @@ export default class EnviViewer extends EventEmitter {
      * ZH: 销毁查看器实例，清理资源并移除画布。
      */
     destroy() {
+        this.#header = null;
         this.#internalViewer.destroy();
         if (this.#container && this.#canvas) {
             this.#container.removeChild(this.#canvas);

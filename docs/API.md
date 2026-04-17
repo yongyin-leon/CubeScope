@@ -1,85 +1,37 @@
-# CubeScope API Draft
+# CubeScope Alpha API
 
-## Design Principles
-
-1. Public API should be small
-2. Core methods should be format-agnostic
-3. Analysis must be an extension system, not a hard-coded branch
-4. Results should be layerable and exportable
+This document describes the actual public browser SDK targeted by
+`0.1.0-alpha.1`.
 
 ## Main Entry Point
 
 ```ts
-import { createViewer } from '@cubescope/web'
+import EnviViewer from '@cubescope/web'
 
-const viewer = await createViewer(container, options)
+const viewer = new EnviViewer(container, options)
 ```
 
-## Viewer Options
+The alpha keeps a class-based API. It does not introduce a factory helper.
+
+## ViewerOptions
 
 ```ts
 type ViewerOptions = {
-  preferredRenderer?: 'webgpu' | 'webgl'
-  allowFallback?: boolean
-  maxWorkers?: number
-  tileSize?: number
-  formats?: FormatAdapter[]
-  analysis?: AnalysisAlgorithm[]
+  workerUrl?: string
+  wasmJsUrl?: string
+  wasmWasmUrl?: string
+  enableBackgroundStats?: boolean
+  enableTilePreloading?: boolean
 }
 ```
 
-## Core Viewer Methods
+## Core Surface
 
 ```ts
-interface CubeViewer {
-  load(source: LoadSource): Promise<void>
-  unload(): Promise<void>
-  destroy(): Promise<void>
-
-  getHeader(): CubeHeader | null
-  getView(): ViewState
-  setView(next: Partial<ViewState>): void
-
-  setBands(bands: RGBBands): Promise<void>
-  getBands(): RGBBands
-
-  getSpectrum(x: number, y: number): Promise<SpectrumResult>
-  getStats(band: number): Promise<BandStats>
-
-  addLayer(layer: ViewerLayer): string
-  updateLayer(id: string, patch: Partial<ViewerLayer>): void
-  removeLayer(id: string): void
-  listLayers(): ViewerLayer[]
-
-  export(request: ExportRequest): Promise<Blob | ArrayBuffer | object>
-
-  analysis: AnalysisManager
-
-  on(event: ViewerEventName, handler: ViewerEventHandler): Unsubscribe
-}
-```
-
-## Load Sources
-
-```ts
-type LoadSource =
-  | { kind: 'envi-local'; headerFile: File; dataFile: File }
-  | { kind: 'envi-http'; headerUrl: string; dataUrl: string }
-  | { kind: 'adapter'; adapter: string; source: unknown }
-```
-
-## Metadata Types
-
-```ts
-type CubeHeader = {
-  width: number
-  height: number
-  bands: number
-  interleave: 'bip' | 'bil' | 'bsq' | string
-  dataType: string
-  byteOrder: 'lsb' | 'msb' | string
-  wavelengths?: number[]
-  metadata?: Record<string, unknown>
+type LoadSource = {
+  kind: 'envi-local'
+  headerFile: File
+  dataFile: File
 }
 
 type RGBBands = {
@@ -88,21 +40,34 @@ type RGBBands = {
   b: number
 }
 
-type BandStats = {
-  min: number
-  max: number
-  mean?: number
-  std?: number
+type RuntimeConfig = {
+  backgroundStats?: boolean
+  tilePreloading?: boolean
 }
 
-type ViewState = {
-  scale: number
-  offsetX: number
-  offsetY: number
+interface CubeViewer {
+  init(): Promise<void>
+  load(source: LoadSource): Promise<void>
+  loadFile(hdrFile: File, dataFile: File): Promise<void>
+  unload(): Promise<void>
+  destroy(): Promise<void>
+
+  getHeader(): Record<string, unknown> | null
+  setBands(bands: RGBBands): void
+  updateConfig(next: RuntimeConfig): void
+  getSpectralProfile(x: number, y: number): Promise<Float32Array | null>
+
+  on(eventName: ViewerEventName, handler: ViewerEventHandler): void
+  off(eventName: ViewerEventName, handler: ViewerEventHandler): void
 }
 ```
 
-## Events
+Compatibility note:
+
+- `load({ kind: 'envi-local', headerFile, dataFile })` is the primary API
+- `loadFile(hdrFile, dataFile)` remains as a compatibility alias
+
+## Stable Event Set
 
 ```ts
 type ViewerEventName =
@@ -110,182 +75,67 @@ type ViewerEventName =
   | 'loadstart'
   | 'loadend'
   | 'header'
-  | 'viewchange'
   | 'bandschange'
   | 'progress'
-  | 'analysisstart'
-  | 'analysisend'
   | 'performance'
   | 'error'
+  | 'image-clicked'
 ```
+
+Compatibility aliases still forwarded by the wrapper:
+
+- `headerloaded`
+- `bandschanged`
+
+Additional compatibility passthrough events currently exposed by the wrapper,
+but not frozen as part of the minimal alpha event contract:
+
+- `metadata`
+- `statechange`
+- `log`
+- `destroyed`
 
 Recommended payload patterns:
 
-- `header` -> `CubeHeader`
-- `bandschange` -> `RGBBands`
-- `progress` -> `{ taskId, stage, completed, total }`
-- `performance` -> `{ name, value, unit, context? }`
-- `error` -> `{ code, message, cause? }`
+- `header` -> parsed ENVI header object
+- `bandschange` -> `{ r, g, b }`
+- `progress` -> `{ type, processed, total, progress }`
+- `performance` -> `{ name: 'timeToInitialView' | 'bandSwitchTime', value, unit }`
+- `error` -> `string`
+- `image-clicked` -> `{ x, y }`
+- `metadata` -> source/file metadata summary
+- `statechange` -> `{ loading, message? }`
+- `log` -> `string`
+- `destroyed` -> no payload
 
-## Layer Types
+## Binary Data Ownership Rules
 
-```ts
-type ViewerLayer =
-  | RGBLayer
-  | GrayscaleLayer
-  | MaskLayer
-  | RasterLayer
-  | OverlayLayer
+For large datasets, the binary ownership model is part of the contract:
 
-type BaseLayer = {
-  id?: string
-  name: string
-  visible?: boolean
-  opacity?: number
-}
+1. metadata, progress, and errors may use normal object passing
+2. tiles, spectra, and other large buffers should cross thread boundaries using
+   `Transferable` ownership transfer rather than implicit structured clone
+3. `SharedArrayBuffer` remains optional and is not required for correct alpha
+   behavior
 
-type RGBLayer = BaseLayer & {
-  type: 'rgb'
-  bands: RGBBands
-}
+## Lifecycle Expectations
 
-type GrayscaleLayer = BaseLayer & {
-  type: 'grayscale'
-  band: number
-}
+The alpha implementation is expected to honor these rules:
 
-type MaskLayer = BaseLayer & {
-  type: 'mask'
-  data: Uint8Array | ArrayBuffer
-  width: number
-  height: number
-}
+1. `load(source)` starts a new source-scoped cache domain
+2. `unload()` clears source-scoped caches and releases renderer-owned GPU
+   resources
+3. render caches are tied to the active renderer/device and may be dropped on
+   context loss or renderer switch
+4. stale worker responses from a previous source must not mutate the active
+   viewer state
 
-type RasterLayer = BaseLayer & {
-  type: 'raster'
-  data: Float32Array | Uint8Array | ArrayBuffer
-  width: number
-  height: number
-  colormap?: string
-}
+## Non-Goals For `0.1.0-alpha.1`
 
-type OverlayLayer = BaseLayer & {
-  type: 'overlay'
-  features: unknown[]
-}
-```
+The alpha does not expose:
 
-## Analysis Manager
-
-```ts
-interface AnalysisManager {
-  list(): AnalysisDescriptor[]
-  register(algo: AnalysisAlgorithm<any, any>): void
-  unregister(id: string): void
-  run<I, O>(id: string, input: I): Promise<AnalysisRunResult<O>>
-}
-```
-
-## Analysis Contracts
-
-```ts
-type AnalysisDescriptor = {
-  id: string
-  version: string
-  label: string
-  kind: 'pixel' | 'roi' | 'tile-stream' | 'whole-cube'
-  runtime: 'wasm-worker' | 'webgpu' | 'remote'
-}
-
-interface AnalysisAlgorithm<I, O> {
-  id: string
-  version: string
-  label: string
-  kind: 'pixel' | 'roi' | 'tile-stream' | 'whole-cube'
-  runtime: 'wasm-worker' | 'webgpu' | 'remote'
-  run(ctx: AnalysisContext, input: I): Promise<O>
-}
-```
-
-## Analysis Context
-
-```ts
-interface AnalysisContext {
-  header: CubeHeader
-  cube: CubeStore
-  signalProgress(progress: {
-    stage: string
-    completed?: number
-    total?: number
-  }): void
-}
-```
-
-## Suggested First-Party Analysis Inputs
-
-```ts
-type PixelInput = { x: number; y: number }
-
-type ROIInput = {
-  roi:
-    | { kind: 'rect'; x: number; y: number; width: number; height: number }
-    | { kind: 'polygon'; points: Array<[number, number]> }
-}
-
-type BandMathInput = {
-  expression: string
-  bands: number[]
-}
-
-type PCAInput = {
-  bands?: number[]
-  roi?: ROIInput['roi']
-  components: number
-}
-```
-
-## Analysis Output Model
-
-```ts
-type AnalysisRunResult<O> = {
-  algorithm: { id: string; version: string }
-  startedAt: string
-  finishedAt: string
-  output: O
-  artifacts?: AnalysisArtifact[]
-  provenance?: Record<string, unknown>
-}
-
-type AnalysisArtifact =
-  | { type: 'layer'; layer: ViewerLayer }
-  | { type: 'spectrum'; data: SpectrumResult }
-  | { type: 'table'; rows: Record<string, unknown>[] }
-  | { type: 'blob'; name: string; blob: Blob }
-```
-
-## Export Requests
-
-```ts
-type ExportRequest =
-  | { kind: 'spectrum'; x: number; y: number; format: 'json' | 'csv' }
-  | { kind: 'layer'; layerId: string; format: 'png' | 'tiff' | 'json' }
-  | { kind: 'analysis'; runId: string; format: 'json' | 'zip' }
-```
-
-## Non-Goals For The Public API
-
-The public API should not expose:
-
-1. raw worker lists
-2. internal cache maps
-3. renderer-private resources
-4. demo-specific monitor state
-5. ad hoc event names that only one sample app uses
-
-## Compatibility Goal
-
-The public API should be stable enough that:
-
-1. a plain JS app can embed the viewer
-2. a React wrapper can sit on top without private hooks
-3. analysis plugins can be distributed independently
+1. HTTP range data sources
+2. analysis-core or plugin APIs
+3. layer management APIs
+4. renderer-private resources
+5. raw worker pools or cache maps
