@@ -6,7 +6,7 @@ Turn the current prototype into an open-source, analysis-ready viewer platform
 without losing the performance advantages already present in the Rust/WASM +
 worker design.
 
-## Current Stage Assessment (2026-04-17)
+## Current Stage Assessment (2026-04-23)
 
 CubeScope is no longer at the repository-hygiene-only stage. It is currently in
 a private `0.1.0-alpha.1` local release-candidate state:
@@ -23,9 +23,8 @@ a private `0.1.0-alpha.1` local release-candidate state:
 What this means in practice:
 
 1. the project is already software-paper-oriented and locally reproducible
-2. the project is not yet beta, because public remote validation beyond the
-   repo-local fixture, Node 22 target-runtime confirmation, and deeper internal
-   extractions are still pending
+2. the project is not yet beta, because broader public-release gates such as
+   external CI and repository opening are still deferred
 3. the project is not yet in Phase 3 analysis work, even though spectral probe
    functionality already exists
 
@@ -45,6 +44,19 @@ feature-first:
 
 This order reduces the risk that attractive feature work hardens accidental
 coupling.
+
+## Runtime Baseline Policy
+
+CubeScope currently uses a two-level Node policy:
+
+1. official release and reproducibility baseline: `Node 22.x`
+2. newer Node versions may still be used for local development and
+   compatibility observation
+3. release gates, alpha reports, and software-paper-facing reproducibility
+   claims remain anchored to `Node 22.x`
+
+This keeps the project aligned with an LTS runtime without forbidding local
+exploration on newer Node lines.
 
 ## Internal Refactor And Semver Policy
 
@@ -182,7 +194,7 @@ instead of delaying it.
 - move debug panels to demo app
 - expose stable events and methods only
 
-### Progress Snapshot (2026-04-17)
+### Progress Snapshot (2026-04-23)
 
 - completed: demo-only panels moved under `examples/demo/*`
 - completed: wrapper now exposes stable aliases for `header`, `bandschange`, runtime `updateConfig()`, and `unload()`
@@ -206,12 +218,35 @@ instead of delaying it.
 - completed: worker envelope normalization and response classification now flow
   through `src/runtime/worker-message-router.js`, reducing how much protocol
   decoding logic still lives inline inside `src/runtime/viewer-runtime.js`
+- completed: stats completion, tile completion, and tile error reaction
+  planning now flow through `src/runtime/runtime-reaction-plan.js`, reducing
+  how much post-route state-reaction logic still lives inline inside
+  `src/runtime/viewer-runtime.js`
+- completed: tile/stats/preload dispatch loops now flow through
+  `src/runtime/runtime-work-executor.js`, reducing how much worker execution
+  loop logic still lives inline inside `src/runtime/viewer-runtime.js`
+- completed: source teardown, metadata summary creation, and renderer
+  device-loss recovery now flow through
+  `src/runtime/runtime-lifecycle-controller.js`, reducing how much lifecycle
+  orchestration still lives inline inside `src/runtime/viewer-runtime.js`
+- completed: band-switch planning, transition kickoff, and transition frame
+  finalization now flow through `src/runtime/runtime-transition-controller.js`,
+  reducing how much transition orchestration still lives inline inside
+  `src/runtime/viewer-runtime.js`
+- completed: canvas resize, visible-tile calculation, and draw-loop
+  scheduling now flow through `src/runtime/runtime-view-controller.js`,
+  reducing how much view-update orchestration still lives inline inside
+  `src/runtime/viewer-runtime.js`
 - completed: outgoing worker request ids, envelopes, and payload shaping now
   flow through `src/runtime/worker-dispatch-policy.js`, reducing how much
   dispatch construction logic still lives inline inside `src/runtime/viewer-runtime.js`
 - completed: raw worker lifecycle management now flows through
   `src/runtime/worker-pool.js`, reducing how much init, broadcast, and
   termination logic still lives inline inside `src/runtime/viewer-runtime.js`
+- completed: initial-load timing, band-switch timing, band-stats readiness,
+  and preload planning now flow through `src/runtime/runtime-policy.js`,
+  reducing how much runtime policy state still lives inline inside
+  `src/runtime/viewer-runtime.js`
 - completed: `CubeHeader` normalization now flows through
   `src/formats/cube-header.js`, fixing `interleave`, `dataType`, and
   `byteOrder` into a stable public metadata contract
@@ -241,7 +276,7 @@ instead of delaying it.
 - add CI for Rust/WASM + package build
 - add browser integration tests
 
-### Progress Snapshot (2026-04-17)
+### Progress Snapshot (2026-04-23)
 
 - completed: external release surface has been reduced to one ESM browser SDK, `@cubescope/web`
 - completed: `dist/` is no longer treated as source-of-truth material
@@ -270,9 +305,21 @@ instead of delaying it.
 - completed: a WebGL compatibility renderer now exists behind the renderer
   seam, and local smoke / benchmark verification can force that path for
   deterministic browser validation
-- pending: one stable public remote sample beyond the repo-local HTTP fixture
-- pending: broader browser-matrix hardening for the auto renderer, especially
-  around unstable headless WebGPU recovery paths
+- completed: the auto renderer now degrades the current viewer session from
+  WebGPU to WebGL after device loss, so recovery does not keep retrying an
+  unstable adapter in `auto` mode
+- completed: a local Chromium browser-matrix report now records observed
+  renderer behavior for both `rendererPreference=webgl` and
+  `rendererPreference=auto` against the deterministic local fixture
+- completed: the runtime now recreates the render canvas when a browser requires
+  a fresh drawing context to recover from WebGPU into the WebGL compatibility
+  path during auto-renderer recovery
+- completed: one stable public remote sample beyond the repo-local HTTP
+  fixture now ships in the sample catalog and passes the public-tier browser
+  validation path
+- pending: broader browser-matrix hardening for the auto renderer beyond the
+  new session-level WebGPU -> WebGL degrade path, especially across real
+  browser/device combinations
 
 ### Exit criteria
 
@@ -365,13 +412,13 @@ instead of delaying it.
 - typed worker protocol and contract tests
 - reproducible local build, smoke, and benchmark path
 - citation, contribution, issue, and release-checklist shell
+- shipped public remote-sample catalog plus public-tier validation artifact
+- Node 22 confirmation on a matching local runtime
 
 ### `0.2.0-alpha`
 
 - first public tag and repository opening
-- one stable public remote sample beyond the repo-local deterministic fixture
 - stronger internal split between viewer core and renderer/store responsibilities
-- Node 22 confirmation on a matching runtime
 - optional external CI once the repository is ready for that gate
 
 ### `0.3.0-beta`
@@ -451,19 +498,30 @@ Current strengths:
 
 Current liabilities:
 
-- scheduler, cache, and interaction logic still overlap more than they should
+- the remaining inline `viewer-runtime` shell still owns public-API glue,
+  spectrum request flow, cancel/invalidation glue, worker bootstrap, and DOM
+  interaction wiring; that residue is now narrower, but it should stay visible
+  in reviews
 - the internal seam floor now exists, and render-session extraction has
   reduced viewer-runtime pressure, and work-scheduler extraction has reduced
   queue-state pressure, and worker-message-router extraction has reduced
-  protocol branching pressure, and worker-dispatch-policy extraction has
-  reduced request-construction pressure, and worker-pool extraction has
-  reduced lifecycle pressure, but runtime-level policy and state reactions
-  still own too much orchestration detail
-- one stable public remote sample beyond the repo-local HTTP fixture is not yet documented
+  protocol branching pressure, and runtime-reaction-plan extraction has
+  reduced post-route state-reaction pressure, and runtime-work-executor
+  extraction has reduced dispatch-loop pressure, and
+  runtime-lifecycle-controller extraction has reduced source/recovery
+  lifecycle pressure, and runtime-transition-controller extraction has reduced
+  transition-flow pressure, and runtime-view-controller extraction has reduced
+  view-update pressure, and worker-dispatch-policy extraction has reduced
+  request-construction pressure, and worker-pool extraction has reduced
+  worker-lifecycle pressure, and runtime-policy extraction has reduced
+  timing/preload pressure, but state reactions and side effects still own too
+  much orchestration detail
+- one stable public remote sample beyond the repo-local HTTP fixture is now
+  documented and shipped in the sample catalog
 - the auto renderer still needs broader browser-matrix hardening, especially
   for WebGPU recovery in unstable headless environments
-- Node 22 on a matching local runtime still needs to be confirmed before the
-  first public alpha tag
+- Node 22 on a matching local runtime has now been confirmed before the first
+  public alpha tag
 
 ## Strategic Thesis
 

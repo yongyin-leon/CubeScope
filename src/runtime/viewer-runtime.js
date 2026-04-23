@@ -9,19 +9,25 @@
  */
 
 import { createEnviFormatAdapter } from '../formats/envi-format-adapter.js';
-import { ProgressType } from '../protocol/worker-protocol.js';
 import { AutoRenderer } from '../rendering/auto-renderer.js';
-import { createRendererInput } from '../rendering/renderer-contract.js';
 import {
     pixelToWorld as mapPixelToWorld,
     worldToPixel as mapWorldToPixel,
 } from '../spatial/coordinate-mapper.js';
 import { RequestTracker } from './request-tracker.js';
 import { RenderSession } from './render-session.js';
+import { ViewerRuntimeLifecycleController } from './runtime-lifecycle-controller.js';
+import { ViewerRuntimePolicy } from './runtime-policy.js';
+import { ViewerRuntimeTransitionController } from './runtime-transition-controller.js';
+import { ViewerRuntimeViewController } from './runtime-view-controller.js';
+import {
+    planStatsCompletionReaction,
+    planTileCompletionReaction,
+    planTileErrorReaction,
+} from './runtime-reaction-plan.js';
+import { ViewerRuntimeWorkExecutor } from './runtime-work-executor.js';
 import {
     buildSpectrumWorkerRequest,
-    buildStatsWorkerRequest,
-    buildTileWorkerRequest,
     buildWorkerCancelRequest,
 } from './worker-dispatch-policy.js';
 import {
@@ -58,13 +64,7 @@ export class ViewerRuntime extends EventEmitter {
     #dataSourceDescriptor = null;
     #cubeStore = null;
     #formatAdapter = null;
-    #performance = { 
-        loadStartTime: 0,
-        bandSwitchStartTime: 0,
-        isInitialLoading: false,
-        initialVisibleTiles: new Set(),
-        completedInitialTiles: new Set(),
-    };
+    #runtimePolicy = new ViewerRuntimePolicy();
 
     // Rendering & Tile state
     #renderer = null;
@@ -73,22 +73,27 @@ export class ViewerRuntime extends EventEmitter {
     #currentBands = { r: 30, g: 20, b: 10 };
     #metadataCache = new SourceValueCache(DEFAULT_METADATA_CACHE_POLICY);
     #statsCache = new SourceMapCache(DEFAULT_STATS_CACHE_POLICY);
-    #rendererRecoveryPromise = null;
-    #resumeTransitionAfterRendererRecovery = false;
+    #lifecycle;
+    #transitionController;
+    #viewController;
 
     // Worker state
     #MAX_WORKERS;
     #workerPool = new ViewerWorkerPool();
     #workScheduler = new WorkScheduler();
+    #workExecutor;
     #pendingSpectrumResolvers = new Map();
     #requestTracker = new RequestTracker();
     #activeSourceId = 0;
+    #rendererPreference;
+    #pendingRendererRecoveryDisabledKinds = null;
     
     // Core components & configuration
     #canvas;
     #wasmPaths;
     #config;
     #resizeObserver;
+    #onCanvasReplaced = null;
 
     // Interaction state
     #isDragging = false;
@@ -106,13 +111,38 @@ export class ViewerRuntime extends EventEmitter {
             backgroundStats: options.enableBackgroundStats ?? true,
             tilePreloading: options.enableTilePreloading ?? true
         };
+        this.#rendererPreference = options.rendererPreference ?? 'auto';
+        this.#onCanvasReplaced = options.onCanvasReplaced ?? null;
         this.#formatAdapter = createEnviFormatAdapter({
             getWasmModule: async () => this.#wasmModule
                 ?? await import(/* @vite-ignore */ this.#wasmPaths.wasmJsPath),
         });
-        this.#renderer = new AutoRenderer(this.#canvas, {
-            onLifecycleEvent: (event) => this.#handleRendererLifecycleEvent(event),
-            preference: options.rendererPreference ?? 'auto',
+        this.#renderer = this.#createRenderer();
+        this.#workExecutor = new ViewerRuntimeWorkExecutor({
+            scheduler: this.#workScheduler,
+            emitLog: (message) => this.emit('log', message),
+            emitError: (message) => this.emit('error', message),
+            emitProgress: (payload) => this.emit('progress', payload),
+            postTrackedWorkerRequest: (worker, request) => this.#postTrackedWorkerRequest(worker, request),
+            debugLog: (...args) => console.log(...args),
+        });
+        this.#lifecycle = new ViewerRuntimeLifecycleController({
+            emitLog: (message) => this.emit('log', message),
+            emitError: (message) => this.emit('error', message),
+            requestAnimationFrameImpl: (callback) => requestAnimationFrame(callback),
+        });
+        this.#transitionController = new ViewerRuntimeTransitionController({
+            emitStateChange: (payload) => this.emit('statechange', payload),
+            requestAnimationFrameImpl: (callback) => requestAnimationFrame(callback),
+            setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
+            postTrackedWorkerRequest: (worker, request) => this.#postTrackedWorkerRequest(worker, request),
+            debugLog: (...args) => console.log(...args),
+        });
+        this.#viewController = new ViewerRuntimeViewController({
+            emitLog: (message) => this.emit('log', message),
+            requestAnimationFrameImpl: (callback) => requestAnimationFrame(callback),
+            setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
+            getDevicePixelRatio: () => window.devicePixelRatio || 1,
         });
         function getAdaptiveMaxWorkers(options = {}) {
             const defaultConcurrency = 4; 
@@ -210,7 +240,12 @@ export class ViewerRuntime extends EventEmitter {
             this.emit('log', 'Main thread WASM initialization completed.');
             this.#resizeCanvas();
             await this.#renderer.init();
-            this.emit('log', `Renderer initialization completed (${this.#renderer.getKind?.() ?? 'unknown'}).`);
+            {
+                const initReport = this.#renderer.getLastInitReport?.() ?? null;
+                const rendererKind = initReport?.selectedKind ?? this.#renderer.getKind?.() ?? 'unknown';
+                const fallbackMode = initReport?.usedFallback ? ', fallback mode' : '';
+                this.emit('log', `Renderer initialization completed (${rendererKind}${fallbackMode}).`);
+            }
             await this.#initWorkers();
             this.#attachEventListeners();
             this.emit('ready');
@@ -251,11 +286,7 @@ export class ViewerRuntime extends EventEmitter {
         });
         this.emit('loadstart');
         this.emit('log', `开始加载: ${headerSource.name}, ${dataSource.name}`);
-        
-        this.#performance.loadStartTime = performance.now();
-        this.#performance.isInitialLoading = true;
-        this.#performance.initialVisibleTiles.clear();
-        this.#performance.completedInitialTiles.clear();
+        this.#runtimePolicy.beginLoad();
         try {
             this.#hdrBytes = new Uint8Array(await headerSource.readAll());
             this.#header = await this.#formatAdapter.parseHeader({
@@ -265,7 +296,7 @@ export class ViewerRuntime extends EventEmitter {
             this.emit('headerloaded', this.#header);
             this.emit('log', `HDR 解析成功。 格式(Interleave): ${this.#header.interleave}`);
 
-            const metadataSummary = await this.#createMetadataSummary({
+            const metadataSummary = await this.#lifecycle.createMetadataSummary({
                 dataSource,
                 header: this.#header,
             });
@@ -293,30 +324,6 @@ export class ViewerRuntime extends EventEmitter {
         }
     }
 
-    async #createMetadataSummary({ dataSource, header }) {
-        let fileSize = null;
-
-        try {
-            fileSize = await dataSource.size();
-        } catch {}
-
-        return {
-                fileName: dataSource.name,
-                fileSize,
-                sourceKind: dataSource.kind,
-                dimensions: {
-                    samples: header.samples,
-                    lines: header.lines,
-                    bands: header.bands,
-                },
-                format: {
-                    interleave: header.interleave.toUpperCase(),
-                    dataType: header.dataType,
-                    byteOrder: header.byteOrder.toUpperCase(),
-                }
-        };
-    }
-
     #hasBandStats(band) {
         return this.#statsCache.has(this.#activeSourceId, band);
     }
@@ -331,25 +338,31 @@ export class ViewerRuntime extends EventEmitter {
 
     setBands({ r, g, b }) {
         if (this.#renderSession.isTransitioning() || !this.#header) return;
-        const newR = parseInt(r, 10), newG = parseInt(g, 10), newB = parseInt(b, 10);
-        if (newR === this.#currentBands.r && newG === this.#currentBands.g && newB === this.#currentBands.b) return;
-        this.#currentBands = { r: newR, g: newG, b: newB };
+        const transitionPlan = this.#transitionController.planBandSelectionChange({
+            currentBands: this.#currentBands,
+            requestedBands: { r, g, b },
+            resolveBandStatsPlan: ({ bands }) => this.#runtimePolicy.resolveBandStatsPlan({
+                bands,
+                hasBandStats: (band) => this.#hasBandStats(band),
+                getBandStats: (band) => this.#getBandStats(band),
+            }),
+        });
+        if (!transitionPlan.changed) return;
+        this.#currentBands = transitionPlan.nextBands;
         this.emit('bandschanged', this.#currentBands);
-        this.#performance.bandSwitchStartTime = performance.now();
+        this.#runtimePolicy.beginBandSwitch();
         console.log('[PERF-LOG] 计时器启动: Band Switch Time');
         this.emit('log', `波段组合已更改为 R:${r}, G:${g}, B:${b}。`);
-        const neededBands = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-        const missingBands = neededBands.filter(b => !this.#hasBandStats(b));
-        if (missingBands.length === 0) {
+        const plan = transitionPlan.plan;
+        if (plan.ready) {
             this.emit('log', "从缓存加载统计值，开始平滑过渡...");
-            this.#globalStats = {};
-            neededBands.forEach(b => this.#globalStats[b] = this.#getBandStats(b));
+            this.#globalStats = plan.globalStats;
             this.#startTransition();
         } else {
-            this.emit('log', `缓存缺失，正在为波段 ${missingBands.join(',')} 计算统计值...`);
+            this.emit('log', `缓存缺失，正在为波段 ${plan.missingBands.join(',')} 计算统计值...`);
             this.emit('statechange', { loading: true, message: '计算统计值...' });
             this.#workScheduler.startWaitingForStats();
-            this.#dispatchStatsCalculation(missingBands, false);
+            this.#dispatchStatsCalculation(plan.missingBands, false);
         }
     }
 
@@ -543,39 +556,48 @@ export class ViewerRuntime extends EventEmitter {
             return;
         }
         case 'stats-complete':
-            for (const band of route.bands) {
-                if (route.stats[band]) {
-                    this.#setBandStats(band, route.stats[band]);
-                }
-            }
-            this.#registerIdleWorkerAndDrain(worker, { stats: false });
-            if (route.isInitial) {
-                this.#globalStats = {};
-                [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b].forEach(b => {
-                    if (this.#hasBandStats(b)) { this.#globalStats[b] = this.#getBandStats(b); }
+            {
+                const reaction = planStatsCompletionReaction({
+                    route,
+                    currentBands: this.#currentBands,
+                    hasBandStats: (band) => Boolean(route.stats?.[band]) || this.#hasBandStats(band),
+                    getBandStats: (band) => route.stats?.[band] ?? this.#getBandStats(band),
+                    isTransitioning: this.#renderSession.isTransitioning(),
+                    isWaitingForStats: this.#workScheduler.isWaitingForStats(),
+                    resolveBandStatsPlan: (input) => this.#runtimePolicy.resolveBandStatsPlan(input),
                 });
-                this.emit('log', `Initial statistics calculation completed: ${JSON.stringify(this.#globalStats)}`);
-                const setupAndDraw = () => {
+                for (const entry of reaction.statsToCache) {
+                    this.#setBandStats(entry.band, entry.stats);
+                }
+                this.#registerIdleWorkerAndDrain(worker, reaction.drain);
+                if (reaction.nextGlobalStats) {
+                    this.#globalStats = reaction.nextGlobalStats;
+                }
+                if (reaction.logMessage) {
+                    this.emit('log', reaction.logMessage);
+                }
+                if (reaction.shouldStopWaitingForStats) {
+                    this.#workScheduler.stopWaitingForStats();
+                }
+                if (reaction.shouldSetInitialView) {
                     this.#setInitialViewAndDraw();
+                }
+                if (reaction.shouldEmitLoadEnd) {
                     this.emit('loadend');
-                    this.emit('statechange', { loading: false });
-                };
-                setupAndDraw();
-                this.#startBackgroundStatCalculation();
-            } else {
-                if (!this.#renderSession.isTransitioning() && this.#workScheduler.isWaitingForStats()) {
-                    const neededBands = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-                    const isNowReady = neededBands.every(b => this.#hasBandStats(b));
-                    if (isNowReady) {
-                        this.emit('log', "Requested band statistics computed; starting smooth transition...");
-                        this.#workScheduler.stopWaitingForStats();
-                        this.#globalStats = {};
-                        neededBands.forEach(b => this.#globalStats[b] = this.#getBandStats(b));
-                        this.#startTransition();
-                    }
+                }
+                if (reaction.nextStateChange) {
+                    this.emit('statechange', reaction.nextStateChange);
+                }
+                if (reaction.shouldStartBackgroundStats) {
+                    this.#startBackgroundStatCalculation();
+                }
+                if (reaction.shouldStartTransition) {
+                    this.#startTransition();
+                }
+                if (reaction.shouldProcessBackgroundStatsQueue) {
+                    this.#processBackgroundStatsQueue();
                 }
             }
-            this.#processBackgroundStatsQueue();
             return;
         case 'tile-complete-malformed':
             this.emit('log', `[ERROR] Received malformed tile payload; discarded. Payload: ${route.detail}`);
@@ -600,43 +622,45 @@ export class ViewerRuntime extends EventEmitter {
                 header: this.#header,
                 tilePayload: payload,
             });
-            if (!stored) {
-                this.#renderSession.removeCurrentTile(tileKey);
-                this.#registerIdleWorkerAndDrain(worker, {
-                    tiles: true,
-                    preload: true,
-                });
-                return;
-            }
-            this.#renderSession.markCurrentTileLoaded(tileKey);
-            if (this.#renderSession.isTransitioning()) {
-                if (this.#renderSession.consumeTransitionTile() === 0) {
-                    //
-                    // 结束计时
-                    const bandSwitchTime = performance.now() - this.#performance.bandSwitchStartTime;
-                    console.log(`%c[PERF-LOG] Band switch completed! Time: ${bandSwitchTime.toFixed(0)} ms`, 'color: green; font-weight: bold;');
-
-                    // 发送新的 performance 事件
-                    this.emit('performance', {
-                        name: 'bandSwitchTime',
-                        value: bandSwitchTime,
-                        unit: 'ms'
-                    });
-                    this.#finalizeTransitionFrame();
-                }
-            } else {
-                if (this.#performance.isInitialLoading) {
-                    if (this.#performance.initialVisibleTiles.has(tileKey)) {
-                        this.#performance.completedInitialTiles.add(tileKey);
-                        this.#checkInitialViewCompletion();
+            const isTransitioning = this.#renderSession.isTransitioning();
+            let completionMetric = null;
+            let transitionTilesRemaining = null;
+            if (stored) {
+                this.#renderSession.markCurrentTileLoaded(tileKey);
+                if (isTransitioning) {
+                    transitionTilesRemaining = this.#renderSession.consumeTransitionTile();
+                    if (transitionTilesRemaining === 0) {
+                        completionMetric = this.#runtimePolicy.completeBandSwitchMetric();
                     }
+                } else {
+                    completionMetric = this.#runtimePolicy.recordCompletedInitialTile(tileKey);
                 }
+            }
+            const reaction = planTileCompletionReaction({
+                stored,
+                isTransitioning,
+                transitionTilesRemaining,
+                initialViewMetric: completionMetric,
+            });
+            if (reaction.shouldRemoveCurrentTile) {
+                this.#renderSession.removeCurrentTile(tileKey);
+            }
+            if (reaction.performanceMetric) {
+                if (reaction.performanceMetric.name === 'bandSwitchTime') {
+                    console.log(`%c[PERF-LOG] Band switch completed! Time: ${reaction.performanceMetric.value.toFixed(0)} ms`, 'color: green; font-weight: bold;');
+                } else if (reaction.performanceMetric.name === 'timeToInitialView') {
+                    console.log(`%c[PERF-LOG] All initial tiles loaded. Emitting 'performance' event.`, 'color: green; font-weight: bold;');
+                    console.log(`%c[PERF-LOG] Time to Initial View: ${reaction.performanceMetric.value.toFixed(0)} ms`, 'color: green; font-weight: bold;');
+                }
+                this.emit('performance', reaction.performanceMetric);
+            }
+            if (reaction.shouldFinalizeTransitionFrame) {
+                this.#finalizeTransitionFrame();
+            }
+            if (reaction.shouldRequestAnimationFrameDraw) {
                 requestAnimationFrame(() => this.#updateAndDraw());
             }
-            this.#registerIdleWorkerAndDrain(worker, {
-                tiles: true,
-                preload: true,
-            });
+            this.#registerIdleWorkerAndDrain(worker, reaction.drain);
             return;
         }
         case 'spectrum-complete': {
@@ -658,24 +682,28 @@ export class ViewerRuntime extends EventEmitter {
             return;
         }
         case 'tile-error': {
-            if (this.#renderSession.isTransitioning()) {
-                 if (this.#renderSession.consumeTransitionTile() === 0) {
-                    this.#finalizeTransitionFrame();
-                 }
+            const isTransitioning = this.#renderSession.isTransitioning();
+            const transitionTilesRemaining = isTransitioning
+                ? this.#renderSession.consumeTransitionTile()
+                : null;
+            const reaction = planTileErrorReaction({
+                tileKey: route.tileKey,
+                message: route.message,
+                isTransitioning,
+                transitionTilesRemaining,
+            });
+            if (reaction.shouldFinalizeTransitionFrame) {
+                this.#finalizeTransitionFrame();
             }
-            const tileKey = route.tileKey ?? 'unknown';
-            this.emit('log', `Worker failed to load tile (${tileKey}) : ${route.message || 'Unknown error'}`);
+            this.emit('log', reaction.logMessage);
             const slot = this.#renderSession.getCurrentRenderSlot();
-            this.#renderSession.removeCurrentTile(tileKey);
+            this.#renderSession.removeCurrentTile(reaction.tileKey);
             this.#renderer.dropTile({
                 sourceId: this.#activeSourceId,
                 slot,
-                tileKey,
+                tileKey: reaction.tileKey,
             });
-            this.#registerIdleWorkerAndDrain(worker, {
-                tiles: true,
-                preload: true,
-            });
+            this.#registerIdleWorkerAndDrain(worker, reaction.drain);
             return;
         }
         case 'error':
@@ -746,243 +774,166 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     #dispatchStatsCalculation(bands, isInitial = false) {
-        if (this.#workScheduler.hasIdleWorker()) {
-            const worker = this.#workScheduler.takeIdleWorker();
-            this.#postTrackedWorkerRequest(worker, buildStatsWorkerRequest({
-                sourceId: this.#activeSourceId,
-                hdrBytes: this.#hdrBytes,
-                dataSource: this.#dataSourceDescriptor,
-                bands,
-                header: this.#header,
-                isInitial,
-            }));
-        } else {
-            if (!isInitial) {
-                this.emit('log', "No idle worker; task queued for background.");
-                this.#workScheduler.prependBackgroundStatsBands(bands);
-            } else {
-                this.emit('error', "No available worker for initial stats task!");
-            }
-        }
+        return this.#workExecutor.dispatchStatsCalculation({
+            bands,
+            isInitial,
+            sourceId: this.#activeSourceId,
+            hdrBytes: this.#hdrBytes,
+            dataSource: this.#dataSourceDescriptor,
+            header: this.#header,
+        });
     }
     
     #startTransition() {
-        if (!this.#renderSession.beginTransition({
+        this.#transitionController.startTransition({
+            renderSession: this.#renderSession,
             renderer: this.#renderer,
             sourceId: this.#activeSourceId,
-        })) return;
-        this.emit('statechange', { loading: true, message: 'Switching bands...' });
-        const visibleTiles = this.#calculateVisibleTiles();
-        this.#renderSession.setTransitionTileCount(visibleTiles.length);
-        if (visibleTiles.length === 0) {
-            this.#renderSession.cancelTransition();
-            requestAnimationFrame(() => this.#updateAndDraw());
-            this.emit('statechange', { loading: false });
-            return;
-        }
-        for (const tile of visibleTiles) {
-            const worker = this.#workScheduler.takeIdleWorker();
-            if (worker) {
-                const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-                console.log(`[主线程-1-发送任务] (过渡) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-                this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
-                    sourceId: this.#activeSourceId,
-                    hdrBytes: this.#hdrBytes,
-                    dataSource: this.#dataSourceDescriptor,
-                    tile,
-                    bands: bandsPayload,
-                    globalStats: this.#globalStats,
-                    header: this.#header,
-                    phase: 'transition',
-                }));
-            } else {
-                this.#renderSession.consumeTransitionTile();
-                this.#workScheduler.enqueueTileRequest(`${tile.x},${tile.y}`, tile);
-            }
-        }
-        this.#workScheduler.stopPreloading();
+            getVisibleTiles: () => this.#calculateVisibleTiles(),
+            takeIdleWorker: () => this.#workScheduler.takeIdleWorker(),
+            enqueueTileRequest: (tileKey, tile) => this.#workScheduler.enqueueTileRequest(tileKey, tile),
+            stopPreloading: () => this.#workScheduler.stopPreloading(),
+            requestDraw: () => this.#updateAndDraw(),
+            hdrBytes: this.#hdrBytes,
+            dataSource: this.#dataSourceDescriptor,
+            currentBands: this.#currentBands,
+            globalStats: this.#globalStats,
+            header: this.#header,
+        });
     }
 
     #startBackgroundStatCalculation() {
-        if (!this.#config?.backgroundStats) {
-            this.emit('log', '后台统计功能已关闭。');
-            return;
+        const result = this.#workExecutor.startBackgroundStatsCalculation({
+            enabled: this.#config?.backgroundStats,
+            header: this.#header,
+            hasBandStats: (band) => this.#hasBandStats(band),
+        });
+        if (result.started) {
+            this.#processBackgroundStatsQueue();
         }
-        const pendingBands = [];
-        for (let i = 1; i <= this.#header.bands; i++) {
-            if (!this.#hasBandStats(i)) {
-                pendingBands.push(i);
-            }
-        }
-        this.#workScheduler.replaceBackgroundStatsQueue(pendingBands);
-        if (!this.#workScheduler.hasBackgroundStatsWork()) {
-            this.emit('log', `所有波段统计值已在缓存中，无需后台计算。`);
-            return;
-        }
-        this.emit('log', `开始后台统计... 队列中有 ${this.#workScheduler.getBackgroundStatsCount()} 个波段待处理。`);
-        this.#processBackgroundStatsQueue();
     }
 
     #processBackgroundStatsQueue() {
-        if (this.#renderSession.isTransitioning()) return;
-        if (this.#workScheduler.hasIdleWorker() && this.#workScheduler.hasBackgroundStatsWork()) {
-            const worker = this.#workScheduler.takeIdleWorker();
-            const nextBand = this.#workScheduler.takeNextBackgroundStatsBand();
-            if (!worker || !nextBand) {
-                return;
-            }
-            this.emit('progress', {
-                type: ProgressType.STATS_CALCULATION,
-                processed: nextBand.processed,
-                total: nextBand.total,
-                progress: nextBand.progressPercent
-            });
-            this.#postTrackedWorkerRequest(worker, buildStatsWorkerRequest({
-                sourceId: this.#activeSourceId,
-                hdrBytes: this.#hdrBytes,
-                dataSource: this.#dataSourceDescriptor,
-                bands: [nextBand.band],
-                header: this.#header,
-                isInitial: false,
-            }));
-        }
+        return this.#workExecutor.processBackgroundStatsQueue({
+            isTransitioning: this.#renderSession.isTransitioning(),
+            sourceId: this.#activeSourceId,
+            hdrBytes: this.#hdrBytes,
+            dataSource: this.#dataSourceDescriptor,
+            header: this.#header,
+        });
     }
     
     #processTileRequestQueue() {
-        if (this.#renderSession.isTransitioning()) return;
-        while (this.#workScheduler.hasIdleWorker() && this.#workScheduler.hasTileRequests()) {
-            const nextTile = this.#workScheduler.takeNextTileRequest();
-            const worker = this.#workScheduler.takeIdleWorker();
-            if (!nextTile || !worker || !nextTile.tile) {
-                continue;
-            }
-            const { tile } = nextTile;
-            const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-            console.log(`[主线程-1-发送任务] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-            this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
-                sourceId: this.#activeSourceId,
-                hdrBytes: this.#hdrBytes,
-                dataSource: this.#dataSourceDescriptor,
-                tile,
-                bands: bandsPayload,
-                globalStats: this.#globalStats,
-                header: this.#header,
-                phase: 'visible',
-            }));
-        }
+        return this.#workExecutor.processTileRequestQueue({
+            isTransitioning: this.#renderSession.isTransitioning(),
+            sourceId: this.#activeSourceId,
+            hdrBytes: this.#hdrBytes,
+            dataSource: this.#dataSourceDescriptor,
+            header: this.#header,
+            currentBands: this.#currentBands,
+            globalStats: this.#globalStats,
+        });
     }
 
     #updateAndDraw() {
-        if (!this.#header || !this.#renderer || !this.#globalStats) return;
-        const visibleTiles = this.#calculateVisibleTiles();
-        if (this.#performance.isInitialLoading && this.#performance.initialVisibleTiles.size === 0 && visibleTiles.length > 0) {
-            this.#performance.initialVisibleTiles = new Set(visibleTiles.map(t => `${t.x},${t.y}`));
-        }
-        const renderResult = this.#renderer.render(createRendererInput({
-            sourceId: this.#activeSourceId,
-            slot: 'active',
+        return this.#viewController.updateAndDraw({
             header: this.#header,
-            viewState: this.#renderSession.getViewState(),
-            tiles: visibleTiles,
-            clearMode: this.#renderSession.isTransitioning() ? 'load' : 'clear',
-        }));
-        if (renderResult.rendererReady === false) {
-            return;
-        }
-        let needsLoad = false;
-        for (const tile of renderResult.missingTiles) {
-            const tileKey = `${tile.x},${tile.y}`;
-            if (this.#renderSession.markActiveTilePending(tileKey)) {
-                this.#workScheduler.enqueueTileRequest(tileKey, tile);
-                needsLoad = true;
-            }
-        }
-        if (needsLoad) { this.#processTileRequestQueue(); }
-        if (!needsLoad && this.#workScheduler.isPreloading() && !this.#workScheduler.hasTileRequests() && this.#workScheduler.hasPreloadEntries()) { this.#processPreloadQueue(); }
+            renderer: this.#renderer,
+            sourceId: this.#activeSourceId,
+            renderSession: this.#renderSession,
+            runtimePolicy: this.#runtimePolicy,
+            globalStats: this.#globalStats,
+            canvas: this.#canvas,
+            workScheduler: this.#workScheduler,
+            enqueueTileRequest: (tileKey, tile) => this.#workScheduler.enqueueTileRequest(tileKey, tile),
+            processTileRequestQueue: () => this.#processTileRequestQueue(),
+            processPreloadQueue: () => this.#processPreloadQueue(),
+        });
     }
     
     #calculateVisibleTiles() {
-        return this.#renderSession.calculateVisibleTiles({
+        return this.#viewController.calculateVisibleTiles({
+            renderSession: this.#renderSession,
             header: this.#header,
-            canvasWidth: this.#canvas.clientWidth,
-            canvasHeight: this.#canvas.clientHeight,
+            canvas: this.#canvas,
         });
     }
     
     #setInitialViewAndDraw() {
-        const scale = this.#renderSession.setInitialView(this.#header);
-        this.emit('log', `Setting initial focused view: scale ${scale.toFixed(2)}x`);
-        requestAnimationFrame(() => this.#updateAndDraw());
-        setTimeout(() => this.#startPreloading(), 500);
+        return this.#viewController.setInitialViewAndDraw({
+            header: this.#header,
+            renderSession: this.#renderSession,
+            requestDraw: () => this.#updateAndDraw(),
+            startPreloading: () => this.#startPreloading(),
+        });
     }
 
     #startPreloading() {
-        if (!this.#config?.tilePreloading) {
-            this.emit('log', 'Tile preloading is disabled.');
-            return;
+        const result = this.#workExecutor.startPreloading({
+            enabled: this.#config?.tilePreloading,
+            isPreloading: this.#workScheduler.isPreloading(),
+            header: this.#header,
+            globalStats: this.#globalStats,
+            tileSize: this.#renderSession.getTileSize(),
+            visibleTiles: this.#calculateVisibleTiles(),
+            hasActiveTile: (tileKey) => this.#renderSession.hasActiveTile(tileKey),
+            buildPreloadEntries: (input) => this.#runtimePolicy.buildPreloadEntries(input),
+        });
+        if (result.started) {
+            this.#processPreloadQueue();
         }
-        if (this.#workScheduler.isPreloading() || !this.#header || !this.#globalStats) return;
-        const preloadEntries = [];
-        const tileSize = this.#renderSession.getTileSize();
-        const maxTileX = Math.ceil(this.#header.samples / tileSize);
-        const maxTileY = Math.ceil(this.#header.lines / tileSize);
-        const visibleTiles = this.#calculateVisibleTiles();
-        const visibleSet = new Set(visibleTiles.map(t => `${t.x},${t.y}`));
-        const centerX = Math.floor((visibleTiles.reduce((sum, t) => sum + t.x, 0) / visibleTiles.length) || 0);
-        const centerY = Math.floor((visibleTiles.reduce((sum, t) => sum + t.y, 0) / visibleTiles.length) || 0);
-        for (let y = 0; y < maxTileY; y++) {
-            for (let x = 0; x < maxTileX; x++) {
-                const tileKey = `${x},${y}`;
-                if (!visibleSet.has(tileKey) && !this.#renderSession.hasActiveTile(tileKey)) {
-                    const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
-                    preloadEntries.push({ tile: { x, y }, dist });
-                }
-            }
-        }
-        preloadEntries.sort((a, b) => a.dist - b.dist);
-        this.#workScheduler.startPreloading(preloadEntries);
-        this.emit('log', `Starting smart preloading: ${this.#workScheduler.getPreloadCount()} tiles queued for background loading.`);
-        this.#processPreloadQueue();
     }
 
     #processPreloadQueue() {
-        if (!this.#workScheduler.isPreloading() || this.#renderSession.isTransitioning()) return;
-        while (this.#workScheduler.hasIdleWorker() && this.#workScheduler.hasPreloadEntries() && !this.#workScheduler.hasTileRequests()) {
-            const nextEntry = this.#workScheduler.takeNextPreloadEntry();
-            if (!nextEntry?.tile) {
-                continue;
-            }
-            const { tile } = nextEntry;
-            const tileKey = `${tile.x},${tile.y}`;
-            if (this.#renderSession.markActiveTilePending(tileKey)) {
-                const worker = this.#workScheduler.takeIdleWorker();
-                if (!worker) {
-                    this.#renderSession.removeCurrentTile(tileKey);
-                    this.#workScheduler.enqueueTileRequest(tileKey, tile);
-                    break;
-                }
-                const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-                 console.log(`[主线程-1-发送任务] (预加载) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-                this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
-                    sourceId: this.#activeSourceId,
-                    hdrBytes: this.#hdrBytes,
-                    dataSource: this.#dataSourceDescriptor,
-                    tile,
-                    bands: bandsPayload,
-                    globalStats: this.#globalStats,
-                    header: this.#header,
-                    phase: 'preload',
-                }));
-            }
-        }
-        if (!this.#workScheduler.hasPreloadEntries() && this.#workScheduler.isPreloading()) {
-            this.#workScheduler.stopPreloading();
-            this.emit('log', "All tile preloads completed.");
-        }
+        return this.#workExecutor.processPreloadQueue({
+            isTransitioning: this.#renderSession.isTransitioning(),
+            sourceId: this.#activeSourceId,
+            hdrBytes: this.#hdrBytes,
+            dataSource: this.#dataSourceDescriptor,
+            header: this.#header,
+            currentBands: this.#currentBands,
+            globalStats: this.#globalStats,
+            markActiveTilePending: (tileKey) => this.#renderSession.markActiveTilePending(tileKey),
+            removeCurrentTile: (tileKey) => this.#renderSession.removeCurrentTile(tileKey),
+        });
     }
 
     #clearCanvas() {
         this.#renderer?.clearCanvas();
+    }
+
+    #createRenderer({ disabledKinds = [] } = {}) {
+        this.#renderer = new AutoRenderer(this.#canvas, {
+            disabledKinds,
+            onLifecycleEvent: (event) => this.#handleRendererLifecycleEvent(event),
+            preference: this.#rendererPreference,
+        });
+        return this.#renderer;
+    }
+
+    #replaceCanvasForRendererRecovery({ disabledKinds = [] } = {}) {
+        const parent = this.#canvas?.parentElement;
+        if (!parent) {
+            return this.#renderer;
+        }
+
+        const previousCanvas = this.#canvas;
+        this.#detachEventListeners();
+
+        const nextCanvas = document.createElement('canvas');
+        nextCanvas.className = previousCanvas.className;
+        nextCanvas.style.cssText = previousCanvas.style.cssText;
+        nextCanvas.width = previousCanvas.width;
+        nextCanvas.height = previousCanvas.height;
+
+        parent.replaceChild(nextCanvas, previousCanvas);
+        this.#canvas = nextCanvas;
+        this.#renderer?.destroy();
+        const nextRenderer = this.#createRenderer({ disabledKinds });
+        this.#resizeCanvas();
+        this.#attachEventListeners();
+        this.#onCanvasReplaced?.(nextCanvas);
+        return nextRenderer;
     }
 
     #rejectPendingSpectrumRequests(message) {
@@ -993,122 +944,78 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     #finalizeTransitionFrame() {
-        this.#canvas.style.opacity = '0';
-        setTimeout(() => {
-            this.#renderSession.completeTransition({
-                renderer: this.#renderer,
-                sourceId: this.#activeSourceId,
-            });
-            requestAnimationFrame(() => this.#updateAndDraw());
-            this.emit('statechange', { loading: false });
-            setTimeout(() => this.#canvas.style.opacity = '1', 20);
-        }, 200);
+        this.#transitionController.finalizeTransitionFrame({
+            canvas: this.#canvas,
+            renderSession: this.#renderSession,
+            renderer: this.#renderer,
+            sourceId: this.#activeSourceId,
+            requestDraw: () => this.#updateAndDraw(),
+        });
     }
 
     #resetSourceState({
         canceledSourceId = this.#cubeStore?.getSourceId() ?? 0,
         cancelReason = 'source-invalidated',
     } = {}) {
-        this.#cancelSourceRequests(canceledSourceId, cancelReason);
-        this.#workScheduler.resetSourceWorkState();
-        this.#rejectPendingSpectrumRequests('Viewer source unloaded.');
-        this.#renderer?.disposeSource(canceledSourceId);
-        this.#metadataCache.clearSource(canceledSourceId);
-        this.#statsCache.clearSource(canceledSourceId);
-        this.#globalStats = null;
-        this.#requestTracker.clear();
-        this.#cubeStore?.unload();
-        this.#cubeStore = null;
-        this.#hdrBytes = null;
-        this.#dataSourceDescriptor = null;
-        this.#header = null;
-        this.#performance = {
-            loadStartTime: 0,
-            bandSwitchStartTime: 0,
-            isInitialLoading: false,
-            initialVisibleTiles: new Set(),
-            completedInitialTiles: new Set(),
-        };
-        this.#renderSession.resetSourceState();
+        this.#lifecycle.resetSourceState({
+            canceledSourceId,
+            cancelReason,
+            cancelSourceRequests: (sourceId, reason) => this.#cancelSourceRequests(sourceId, reason),
+            resetWorkState: () => this.#workScheduler.resetSourceWorkState(),
+            rejectPendingSpectrumRequests: (message) => this.#rejectPendingSpectrumRequests(message),
+            disposeRendererSource: (sourceId) => this.#renderer?.disposeSource(sourceId),
+            clearMetadataCache: (sourceId) => this.#metadataCache.clearSource(sourceId),
+            clearStatsCache: (sourceId) => this.#statsCache.clearSource(sourceId),
+            clearRequestTracker: () => this.#requestTracker.clear(),
+            unloadCubeStore: () => this.#cubeStore?.unload(),
+            clearRuntimeState: () => {
+                this.#globalStats = null;
+                this.#cubeStore = null;
+                this.#hdrBytes = null;
+                this.#dataSourceDescriptor = null;
+                this.#header = null;
+            },
+            resetRuntimePolicy: () => this.#runtimePolicy.reset(),
+            resetRenderSession: () => this.#renderSession.resetSourceState(),
+        });
     }
 
     #getAspectRatioCorrection() {
-        return this.#renderSession.getAspectRatioCorrection({
+        return this.#viewController.getAspectRatioCorrection({
+            renderSession: this.#renderSession,
             header: this.#header,
-            canvasWidth: this.#canvas.clientWidth,
-            canvasHeight: this.#canvas.clientHeight,
+            canvas: this.#canvas,
         });
     }
 
     #resizeCanvas() {
-        const dpr = window.devicePixelRatio || 1;
-        const displayWidth = Math.round(this.#canvas.clientWidth * dpr);
-        const displayHeight = Math.round(this.#canvas.clientHeight * dpr);
-        if (this.#canvas.width !== displayWidth || this.#canvas.height !== displayHeight) {
-            this.#canvas.width = displayWidth;
-            this.#canvas.height = displayHeight;
-            return true;
-        }
-        return false;
+        return this.#viewController.resizeCanvas(this.#canvas);
     }
-    #checkInitialViewCompletion() {
-        if (!this.#performance.isInitialLoading || this.#performance.initialVisibleTiles.size === 0) {
-            return;
-        }
-
-        if (this.#performance.completedInitialTiles.size >= this.#performance.initialVisibleTiles.size) {
-            const timeToInitialView = performance.now() - this.#performance.loadStartTime;
-            console.log(`%c[PERF-LOG] All initial tiles loaded. Emitting 'performance' event.`, 'color: green; font-weight: bold;');
-            console.log(`%c[PERF-LOG] Time to Initial View: ${timeToInitialView.toFixed(0)} ms`, 'color: green; font-weight: bold;');
-            this.emit('performance', {
-                name: 'timeToInitialView',
-                value: timeToInitialView,
-                unit: 'ms'
-            });
-
-            this.#performance.isInitialLoading = false;
-        }
-    }
-
     #handleRendererLifecycleEvent(event) {
-        if (!event || event.type !== 'device-loss') {
-            return;
+        if (event?.type === 'renderer-fallback-armed') {
+            this.#pendingRendererRecoveryDisabledKinds = event.disabledKinds ?? null;
         }
-
-        const message = event.message ?? 'WebGPU device lost.';
-        const shouldResumeTransition = this.#renderSession.resetForRendererRecovery();
-        this.emit('log', `Renderer lifecycle event: ${message}`);
-        this.#workScheduler.clearTileRequests();
-        this.#workScheduler.stopPreloading();
-        this.#resumeTransitionAfterRendererRecovery = shouldResumeTransition;
-        void this.#recoverRendererAfterDeviceLoss();
+        void this.#lifecycle.handleRendererLifecycleEvent({
+            event,
+            resetForRendererRecovery: () => this.#renderSession.resetForRendererRecovery(),
+            clearTileRequests: () => this.#workScheduler.clearTileRequests(),
+            stopPreloading: () => this.#workScheduler.stopPreloading(),
+            recoverRenderer: () => this.#recoverRendererAfterDeviceLoss(),
+        });
     }
 
     async #recoverRendererAfterDeviceLoss() {
-        if (!this.#renderer || this.#rendererRecoveryPromise) {
-            return this.#rendererRecoveryPromise;
-        }
-
-        this.#rendererRecoveryPromise = (async () => {
-            try {
-                this.emit('log', 'Reinitializing renderer after device loss...');
-                await this.#renderer.init();
-                this.emit('log', `Renderer recovered after device loss (${this.#renderer.getKind?.() ?? 'unknown'}).`);
-
-                if (this.#resumeTransitionAfterRendererRecovery && this.#header && this.#globalStats) {
-                    this.#resumeTransitionAfterRendererRecovery = false;
-                    this.#startTransition();
-                } else if (this.#header && this.#globalStats) {
-                    requestAnimationFrame(() => this.#updateAndDraw());
-                }
-            } catch (error) {
-                this.emit('error', `Renderer recovery failed: ${error.message}`);
-            } finally {
-                this.#resumeTransitionAfterRendererRecovery = false;
-                this.#rendererRecoveryPromise = null;
-            }
-        })();
-
-        return this.#rendererRecoveryPromise;
+        const recoveryRenderer = this.#pendingRendererRecoveryDisabledKinds?.length
+            ? this.#replaceCanvasForRendererRecovery({
+                disabledKinds: this.#pendingRendererRecoveryDisabledKinds,
+            })
+            : this.#renderer;
+        this.#pendingRendererRecoveryDisabledKinds = null;
+        return this.#lifecycle.recoverRendererAfterDeviceLoss({
+            renderer: recoveryRenderer,
+            hasRenderableSource: () => Boolean(this.#header && this.#globalStats),
+            startTransition: () => this.#startTransition(),
+            requestDraw: () => this.#updateAndDraw(),
+        });
     }
 }

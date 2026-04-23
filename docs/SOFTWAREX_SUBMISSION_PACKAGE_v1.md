@@ -1,0 +1,255 @@
+# SoftwareX Submission Package v1
+
+This document turns the current manuscript draft into a SoftwareX-oriented
+submission package plan.
+
+Checked against the official SoftwareX guide on `2026-04-23`:
+
+- Guide for authors:
+  [https://www.sciencedirect.com/journal/softwarex/publish/guide-for-authors](https://www.sciencedirect.com/journal/softwarex/publish/guide-for-authors)
+- Journal overview:
+  [https://www.sciencedirect.com/journal/softwarex](https://www.sciencedirect.com/journal/softwarex)
+
+## Current Fit Assessment
+
+CubeScope is a strong thematic fit for SoftwareX because the project is:
+
+- research software rather than a pure methods paper
+- reusable beyond one narrow case study
+- centered on scientific viewing and interaction tooling
+- supported by citation metadata, reproducibility workflows, and an embeddable
+  software package
+
+The current project state is already close to a submission candidate, but not
+yet fully submission-ready. The main reason is no longer missing software
+evidence; it is that the manuscript and release package still need final
+submission shaping.
+
+## Official Requirements And Recommendations To Respect
+
+As checked on `2026-04-23`, the current official guide indicates that SoftwareX
+submissions include:
+
+1. a short descriptive paper with a `3000` word limit
+2. an open-source software distribution with support material
+3. journal-specific Word or LaTeX templates
+4. an abstract not exceeding `250` words
+5. `1` to `7` English keywords
+6. optional but encouraged article highlights, as `3` to `5` bullet points with
+   each bullet capped at `85` characters including spaces
+7. optional but encouraged graphical abstract material
+8. a title page with corresponding-author details and affiliations
+9. a CRediT contribution statement
+10. conflict-of-interest and funding disclosures
+11. a data statement at submission
+
+The same official guide also clarifies that the `3000`-word limit excludes
+title, authors, affiliations, references, and metadata tables, but includes the
+abstract, running text, figure captions, and footnotes.
+
+The guide also states that accepted SoftwareX software packages are archived in
+the journal's GitHub repository. For CubeScope, this means the repository must
+be public and well-formed by the time of actual submission.
+
+## Current CubeScope Package Decision
+
+### Target article type
+
+- `Original software publication`
+
+### Recommended title
+
+- `CubeScope: a browser-native, local-first viewer kernel for ENVI hyperspectral datasets`
+
+### Abstract selection
+
+- selected abstract: the main abstract in
+  `docs/SOFTWAREX_MANUSCRIPT_v4.md`
+- current measured length: about `197` words
+- status: within the current SoftwareX `250` word limit
+
+### Keywords
+
+Recommended keyword set:
+
+1. `hyperspectral`
+2. `ENVI`
+3. `visualization`
+4. `WebGPU`
+5. `WebAssembly`
+6. `remote-sensing`
+7. `scientific-software`
+
+### Highlights file
+
+Recommended highlights for submission:
+
+- Browser-native ENVI viewer kernel for hyperspectral interaction
+- Rust/WASM parsing with worker-based browser runtime orchestration
+- WebGPU-first rendering with validated WebGL fallback and recovery
+- Reproducible fixtures, packaging, benchmarks, and browser validation
+
+These bullets are also written into a separate draft file:
+
+- `docs/SOFTWAREX_HIGHLIGHTS_v1.txt`
+
+### Graphical abstract concept
+
+Recommended graphical abstract concept:
+
+- left panel: local file and HTTP range source icons
+- center panel: `CubeViewer` with worker + WASM + renderer flow
+- right panel: pseudo-RGB view, spectral probe, and pixel/world mapping callout
+- footer strip: benchmark, browser matrix, package verification
+
+This concept should be rendered later as a clean journal-ready image rather than
+submitted as the Mermaid draft figure from the manuscript.
+
+## Manuscript Compression Status
+
+Current word-count snapshot from the repository draft:
+
+- full draft file, including planning and table material: about `5501` words
+- main narrative block from Sections `1` through `8`: about `3548` words
+- compressed SoftwareX-oriented manuscript:
+  `docs/SOFTWAREX_MANUSCRIPT_v1.md`, about `2047` words excluding title-page
+  placeholders
+- more template-aligned SoftwareX manuscript:
+  `docs/SOFTWAREX_MANUSCRIPT_v2.md`, about `1814` words
+- more submission-ready SoftwareX manuscript:
+  `docs/SOFTWAREX_MANUSCRIPT_v3.md`, about `1770` words
+- more template-aware submission package manuscript:
+  `docs/SOFTWAREX_MANUSCRIPT_v4.md`, about `1953` words
+
+Interpretation:
+
+- the current manuscript draft is strong enough in content
+- the long draft is not submission-length, but a compressed submission-oriented
+  manuscript now exists within the official SoftwareX `3000` word limit
+- the `v2` short manuscript is the best current base for template conversion,
+  because it already carries title-page placeholders, journal-facing section
+  names, and declaration blocks
+- the `v3` short manuscript is the best current base for final manuscript
+  polishing because it further aligns the section structure with a
+  journal-facing software-paper narrative
+- the `v4` short manuscript is the best current base for final submission
+  preparation because it absorbs additional SoftwareX-facing details such as the
+  data statement, fuller title-page placeholders, and more explicit
+  software-availability metadata
+
+Current manuscript decision:
+
+1. keep `docs/SOFTWARE_PAPER_DRAFT_v1.md` as the fuller working manuscript
+2. keep `docs/SOFTWAREX_MANUSCRIPT_v1.md` as the intermediate compressed draft
+3. keep `docs/SOFTWAREX_MANUSCRIPT_v2.md` as the template-aligned intermediate draft
+4. keep `docs/SOFTWAREX_MANUSCRIPT_v3.md` as the submission-ready narrative draft
+5. use `docs/SOFTWAREX_MANUSCRIPT_v4.md` as the current submission-length base
+6. continue polishing the shorter manuscript rather than compressing the long
+   draft in place
+
+## Requirement-By-Requirement Readiness Snapshot
+
+The table below follows the `journal-submission-check` workflow and marks each
+item as `PASS`, `FAIL`, or `UNCLEAR` against the current repository state.
+
+| Requirement | Status | Current evidence | Action needed |
+| --- | --- | --- | --- |
+| Short descriptive manuscript within `3000` words | `PASS` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` is the current short-manuscript base and remains far below the limit | Keep the short manuscript as the submission base |
+| Abstract not exceeding `250` words | `PASS` | Abstract in `docs/SOFTWAREX_MANUSCRIPT_v4.md` is about `197` words | Final copyediting only |
+| `1-7` English keywords | `PASS` | Seven keywords are listed in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final wording review only |
+| Title page with authors, affiliations, corresponding author | `UNCLEAR` | Placeholder fields exist in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Fill in real author metadata before template conversion |
+| CRediT author statement | `UNCLEAR` | Placeholder block exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Finalize contributor roles |
+| Funding statement | `UNCLEAR` | Placeholder block exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Confirm funding or insert no-funding statement |
+| Conflict-of-interest declaration | `PASS` | Draft statement exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Confirm final wording with authors |
+| Generative-AI disclosure | `UNCLEAR` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` now records the journal rule that the section should only be included if disclosure is needed | Decide final disclosure wording or remove the section if not needed |
+| Data statement | `PASS` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` now contains a dedicated data statement section | Align final wording with the public repository and release archive |
+| Highlights file | `PASS` | `docs/SOFTWAREX_HIGHLIGHTS_v1.txt` contains four bullets within the character limit | Final editorial polishing only |
+| Graphical abstract | `UNCLEAR` | Only a text concept is documented in this package | Decide whether to include the recommended graphical abstract and produce the actual image if yes |
+| Open-source repository and support material | `UNCLEAR` | Repository package is strong, but public release timing is still pending | Publish the repository at the chosen release moment |
+| Public release/tag suitable for archiving | `FAIL` | Release plan exists, but no archived public release is final yet | Create the public tag and archive metadata |
+| Journal-specific template formatting | `FAIL` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` is template-aligned but not yet in the official template | Convert into the official Word or LaTeX template |
+| Software availability statement | `UNCLEAR` | Placeholder repository URL exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Insert public repository URL and release identifier |
+| Reproducibility/support evidence | `PASS` | Repository already contains alpha reports, browser matrix, benchmarks, sample validation, and pack verification outputs | Keep outputs organized and cite them in the final package |
+
+## Required Submission Files
+
+The package we should prepare for actual submission is:
+
+1. manuscript in the official SoftwareX template
+2. separate highlights file if we decide to include the recommended highlights
+3. graphical abstract file if we decide to include the recommended graphical abstract
+4. cover letter
+5. conflict-of-interest declaration
+6. funding statement
+7. CRediT contribution statement
+8. public software repository URL
+9. tagged release or archived release metadata
+10. data statement aligned with the final public repository and release archive
+
+## Current Readiness By Item
+
+### Already in good shape
+
+- manuscript core story
+- submission-length manuscript draft
+- more template-aligned submission-length manuscript draft
+- more submission-ready submission-length manuscript draft
+- more template-aware submission-length manuscript draft
+- abstract under the current limit
+- architecture figures drafted
+- reproducibility evidence tables drafted
+- benchmark table drafted
+- citation metadata
+- license
+- public-sample validation evidence
+- Node 22 reproducibility baseline
+- pack-consumer embedding evidence
+
+### Still needs work before submission
+
+- convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official SoftwareX template
+- decide whether to submit a graphical abstract, then produce the actual image if yes
+- prepare the final highlights file in submission-ready form if we keep highlights
+- prepare the final cover letter
+- make the repository public at the correct moment
+- create the public release/tag and archive metadata
+- add external CI evidence if we want the release package to look fully closed
+
+## Suggested Final Submission Sequence
+
+1. compress `docs/SOFTWARE_PAPER_DRAFT_v1.md` to a SoftwareX-length manuscript
+   [completed through `docs/SOFTWAREX_MANUSCRIPT_v1.md`]
+2. reshape the short manuscript into a more template-aligned structure
+   [completed through `docs/SOFTWAREX_MANUSCRIPT_v2.md`]
+3. polish the short manuscript into a more submission-ready journal narrative
+   [completed through `docs/SOFTWAREX_MANUSCRIPT_v3.md`]
+4. absorb additional guide-facing details such as the data statement and fuller title-page placeholders
+   [completed through `docs/SOFTWAREX_MANUSCRIPT_v4.md`]
+5. convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official journal template
+6. finalize highlights and decide whether to submit a graphical abstract
+7. finalize cover letter and declarations
+8. publish the repository and release tag
+9. submit the manuscript with the public repository URL
+
+## Supporting Working Files
+
+The most useful repository-side working files for actual submission preparation
+are now:
+
+- `docs/SOFTWAREX_MANUSCRIPT_v4.md` as the current short-manuscript base
+- `docs/SOFTWAREX_TEMPLATE_INPUT_PACKET_v1.md` as the template-fill packet
+- `docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md` as the current cover-letter base
+- `docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md` as the final fill-in list
+
+## Honest Submission Posture
+
+The strongest honest pitch for CubeScope is:
+
+- not "the complete hyperspectral analysis platform"
+- not "the fastest viewer in all conditions"
+- but "a reusable browser-native ENVI viewer kernel with real reproducibility
+  evidence and a clear extension path"
+
+That is already enough to be credible for SoftwareX, and it is a better basis
+for review than trying to overclaim maturity the software does not yet need to
+pretend to have.

@@ -42,6 +42,37 @@ describe('data source implementations', () => {
         expect(fetchMock.mock.calls[1][1].headers.Range).toBe('bytes=1-2');
     });
 
+    it('reuses a single full HTTP fetch when the whole remote file is requested repeatedly', async () => {
+        const fullResponse = new Uint8Array([1, 2, 3, 4]).buffer;
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(new Response(null, {
+                status: 200,
+                headers: {
+                    'content-length': '4',
+                },
+            }))
+            .mockResolvedValueOnce(new Response(fullResponse, {
+                status: 200,
+                headers: {
+                    'content-length': '4',
+                },
+            }));
+
+        vi.stubGlobal('fetch', fetchMock);
+
+        const source = createHttpRangeDataSource('https://example.com/cube.img');
+
+        expect(Array.from(new Uint8Array(await source.read({ start: 0, end: 4 })))).toEqual([1, 2, 3, 4]);
+        expect(Array.from(new Uint8Array(await source.read({ start: 0, end: 4 })))).toEqual([1, 2, 3, 4]);
+        expect(Array.from(new Uint8Array(await source.readAll()))).toEqual([1, 2, 3, 4]);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[1][1]).toEqual({
+            method: 'GET',
+            headers: undefined,
+        });
+    });
+
     it('serializes and recreates local and remote data sources', async () => {
         const blobSource = createBlobDataSource(new File([new Uint8Array([1, 2, 3])], 'cube.img'));
         const blobCopy = createDataSourceFromDescriptor(serializeDataSource(blobSource));

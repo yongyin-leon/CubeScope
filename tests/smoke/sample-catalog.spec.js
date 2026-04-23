@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 
 import {
     normalizeRemoteSampleCatalog,
@@ -29,7 +29,7 @@ function getActionableErrors(state) {
     );
 }
 
-test('validates the registered remote-sample catalog', async ({ page, request, baseURL }) => {
+test('validates the registered remote-sample catalog', async ({ request, baseURL }) => {
     const catalogResponse = await request.get(remoteSampleCatalogUrl);
     expect(catalogResponse.ok()).toBe(true);
 
@@ -41,54 +41,67 @@ test('validates the registered remote-sample catalog', async ({ page, request, b
     expect(selectedSamples.length).toBeGreaterThan(0);
 
     const sampleReports = [];
-    for (const sample of selectedSamples) {
-        const headerResponse = await request.get(sample.headerUrl, {
-            headers: sample.headers,
+    const browser = await chromium.launch({
+        headless: true,
+        args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader-webgpu'],
+    });
+
+    try {
+        const page = await browser.newPage({
+            baseURL: baseURL ?? 'http://127.0.0.1:4173',
         });
-        expect(headerResponse.ok()).toBe(true);
 
-        const rangeResponse = await request.get(sample.dataUrl, {
-            headers: {
-                ...(sample.headers ?? {}),
-                Range: 'bytes=0-15',
-            },
-        });
-        expect(rangeResponse.status()).toBe(206);
+        for (const sample of selectedSamples) {
+            const headerResponse = await request.get(sample.headerUrl, {
+                headers: sample.headers,
+            });
+            expect(headerResponse.ok()).toBe(true);
 
-        await page.goto(buildExampleUrl({
-            benchmark: true,
-            sampleId: sample.id,
-            renderer: 'webgl',
-        }));
-        await waitForDemoReady(page);
-        const state = await waitForInitialRender(page, { requirePerformanceMetric: false });
-        const probe = await probeFixtureAt(page, { requireWorld: false });
-        const actionableErrors = getActionableErrors(state);
+            const rangeResponse = await request.get(sample.dataUrl, {
+                headers: {
+                    ...(sample.headers ?? {}),
+                    Range: 'bytes=0-15',
+                },
+            });
+            expect(rangeResponse.status()).toBe(206);
 
-        expect(state.loaded).toBe(true);
-        expect(state.metadata?.sourceKind).toBe('http-range');
-        expect(actionableErrors).toEqual([]);
+            await page.goto(buildExampleUrl({
+                benchmark: true,
+                sampleId: sample.id,
+                renderer: 'webgl',
+            }));
+            await waitForDemoReady(page);
+            const state = await waitForInitialRender(page, { requirePerformanceMetric: false });
+            const probe = await probeFixtureAt(page, { requireWorld: false });
+            const actionableErrors = getActionableErrors(state);
 
-        sampleReports.push({
-            id: sample.id,
-            title: sample.title,
-            availability: sample.availability,
-            validationTier: sample.validationTier,
-            transport: {
-                headerStatus: headerResponse.status(),
-                rangeStatus: rangeResponse.status(),
-                contentRange: rangeResponse.headers()['content-range'] ?? null,
-            },
-            browser: {
-                baseURL: baseURL ?? null,
-                loaded: state.loaded === true,
-                sourceKind: state.metadata?.sourceKind ?? null,
-                dimensions: state.metadata?.dimensions ?? null,
-                bands: state.header?.bands ?? null,
-                hasPixelProbe: Boolean(probe?.pixel),
-                hasWorldProbe: Boolean(probe?.world),
-            },
-        });
+            expect(state.loaded).toBe(true);
+            expect(state.metadata?.sourceKind).toBe('http-range');
+            expect(actionableErrors).toEqual([]);
+
+            sampleReports.push({
+                id: sample.id,
+                title: sample.title,
+                availability: sample.availability,
+                validationTier: sample.validationTier,
+                transport: {
+                    headerStatus: headerResponse.status(),
+                    rangeStatus: rangeResponse.status(),
+                    contentRange: rangeResponse.headers()['content-range'] ?? null,
+                },
+                browser: {
+                    baseURL: baseURL ?? null,
+                    loaded: state.loaded === true,
+                    sourceKind: state.metadata?.sourceKind ?? null,
+                    dimensions: state.metadata?.dimensions ?? null,
+                    bands: state.header?.bands ?? null,
+                    hasPixelProbe: Boolean(probe?.pixel),
+                    hasWorldProbe: Boolean(probe?.world),
+                },
+            });
+        }
+    } finally {
+        await browser.close();
     }
 
     mkdirSync(dirname(reportPath), { recursive: true });

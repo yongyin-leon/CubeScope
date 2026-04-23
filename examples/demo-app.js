@@ -4,6 +4,10 @@ import {
     fetchRemoteSampleCatalog,
     getRemoteSampleById,
 } from '../src/samples/remote-sample-catalog.js';
+import {
+    applyRendererLogMessage,
+    createRendererStatus,
+} from './demo/renderer-status.js';
 import { EChartsPerformanceChart } from './demo/echarts-performance-chart.js';
 import { PerformanceMonitorRust } from './demo/rust-performance-monitor.js';
 import { SystemMonitorPanel } from './demo/system-monitor-panel.js';
@@ -38,6 +42,7 @@ const demoState = window.__cubescopeDemoState = {
     ready: false,
     benchmarkMode,
     rendererPreference: requestedRenderer,
+    rendererStatus: createRendererStatus(requestedRenderer),
     viewer: null,
     sampleCatalog: null,
     sampleCatalogUrl: requestedCatalogUrl,
@@ -58,6 +63,10 @@ const demoState = window.__cubescopeDemoState = {
 // --- (EN) Logging Functions / (ZH) 日志函数 ---
 const log = (msg) => {
     console.log(msg);
+    demoState.rendererStatus = applyRendererLogMessage(
+        demoState.rendererStatus,
+        msg
+    ) ?? demoState.rendererStatus;
     if (demoState.logs) {
         demoState.logs.push(String(msg));
     } else {

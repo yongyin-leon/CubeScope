@@ -202,8 +202,14 @@ Current concrete floor in source:
 - `src/runtime/render-session.js`
 - `src/runtime/work-scheduler.js`
 - `src/runtime/worker-message-router.js`
+- `src/runtime/runtime-reaction-plan.js`
+- `src/runtime/runtime-work-executor.js`
+- `src/runtime/runtime-lifecycle-controller.js`
+- `src/runtime/runtime-transition-controller.js`
+- `src/runtime/runtime-view-controller.js`
 - `src/runtime/worker-dispatch-policy.js`
 - `src/runtime/worker-pool.js`
+- `src/runtime/runtime-policy.js`
 
 Current alpha runtime adoption:
 
@@ -221,15 +227,33 @@ Current alpha runtime adoption:
 5. worker envelope normalization and response classification now flow through
    `src/runtime/worker-message-router.js`, so `viewer-runtime` mainly handles
    the stateful side effects rather than inline message decoding
-6. outgoing worker request ids, envelope construction, and command payload
+6. reaction planning for stats completion, tile completion, and tile error now
+   flows through `src/runtime/runtime-reaction-plan.js`, so `viewer-runtime`
+   no longer decides those runtime reactions inline after route classification
+7. tile/stats/preload dispatch loops now flow through
+   `src/runtime/runtime-work-executor.js`, so `viewer-runtime` no longer owns
+   those worker execution loops inline
+8. source teardown, metadata summary creation, and renderer device-loss
+   recovery now flow through `src/runtime/runtime-lifecycle-controller.js`, so
+   `viewer-runtime` no longer owns those lifecycle paths inline
+9. band-switch planning, transition kickoff, and transition frame finalization
+   now flow through `src/runtime/runtime-transition-controller.js`, so
+   `viewer-runtime` no longer owns that transition orchestration inline
+10. canvas resize, visible-tile calculation, and draw-loop scheduling now flow
+   through `src/runtime/runtime-view-controller.js`, so `viewer-runtime` no
+   longer owns that view-update orchestration inline
+11. outgoing worker request ids, envelope construction, and command payload
    shaping now flow through `src/runtime/worker-dispatch-policy.js`, so
    `viewer-runtime` no longer assembles each worker message inline
-7. worker creation, init handshake, fatal-error wiring, broadcast, and
+12. worker creation, init handshake, fatal-error wiring, broadcast, and
    termination now flow through `src/runtime/worker-pool.js`, so
    `viewer-runtime` no longer owns the raw worker lifecycle inline
-8. renderer input is frozen as an internal contract helper before deeper
+13. initial-load timing, band-switch timing, band-stats readiness planning, and
+   preload planning now flow through `src/runtime/runtime-policy.js`, so
+   `viewer-runtime` no longer owns that runtime policy state inline
+14. renderer input is frozen as an internal contract helper before deeper
    renderer/store separation work in the next phase
-9. ENVI `map info` and `coordinate system string` now normalize into a stable
+15. ENVI `map info` and `coordinate system string` now normalize into a stable
    `spatialReference` contract, with affine pixel/world mapping exposed without
    entering renderer reprojection
 
@@ -397,7 +421,7 @@ Recommended eviction rules:
 4. GPU-backed cache entries must release their device resources immediately on
    eviction.
 
-Current implementation status (2026-04-17):
+Current implementation status (2026-04-23):
 
 1. `metadata cache` and `stats cache` are now concrete source-scoped runtime
    slices in `src/runtime/source-cache.js`, consumed by
@@ -443,10 +467,20 @@ consumer justifies independent versioning.
 
 ## Current Weak Points To Correct
 
-1. Renderer, scheduler, cache, and interaction logic are still too tightly coupled
-2. `DataSource`, `FormatAdapter`, `CubeStore`, and `Renderer` are documented seams, not yet concrete modules
-3. The public package install path is defined, but not yet verified from an external consumer application
-4. Fallback renderer and broader browser portability are still absent
+1. The remaining inline `viewer-runtime` shell still owns public-API glue,
+   spectrum request flow, cancel/invalidation glue, worker bootstrap, and DOM
+   interaction wiring; these are now explicit review surfaces
+2. The internal seam floor now exists, but runtime residue should be named
+   concretely instead of described only as "too much orchestration"
+3. One stable public remote sample beyond the repo-local HTTP fixture is still absent
+4. Node 22 local-runtime confirmation is still pending before the first public alpha tag
+
+The auto renderer now treats WebGPU device loss as a session-level signal in
+`auto` mode and prefers WebGL for subsequent recovery attempts; the remaining
+browser work is wider matrix coverage, not basic degrade-path correctness. When
+a browser requires a fresh drawing context to cross from WebGPU to WebGL, the
+runtime now recreates the render canvas before recovering on the compatibility
+path.
 
 ## Architecture Rules
 

@@ -2,9 +2,12 @@
 
 Status snapshot:
 
-- local alpha verification completed on `2026-04-17`
-- local verification artifacts now include benchmark, pack-consumer, and alpha
-  summary reports under `output/`
+- local alpha verification completed on `2026-04-23`
+- local verification artifacts now include benchmark, browser-matrix,
+  pack-consumer, and alpha summary reports under `output/`
+- shipped remote-sample validation now includes both the deterministic local
+  fixture and a public external ENVI sample report under `output/samples/`
+- local `Node 22` verification now passes through `npm run verify:node22-local`
 - GitHub Actions confirmation on Node 22 is intentionally deferred for now and
   is not part of the current execution window
 
@@ -16,14 +19,16 @@ Status snapshot:
 - [x] `npm run build` succeeds on a fresh local checkout
 - [x] `npm run test` succeeds
 - [x] `npm run report:toolchain` writes `output/toolchain/local-toolchain.json`
+- [x] `npm run report:browser-matrix` writes `output/browser-matrix/latest.json`
 - [x] `npm run benchmark` writes `output/benchmark/latest.json`
 - [x] `npm run validate:samples` writes `output/samples/latest.json`
+- [x] public-tier sample validation writes `output/samples/public-latest.json`
 - [x] `npm run verify:pack` validates tarball install/import from an isolated consumer app
 - [x] `npm run report:alpha` writes `output/alpha/local-alpha-summary.json`
 - [x] synthetic fixture metadata is documented
 - [x] registered remote-sample catalog is locally validated
 - [ ] GitHub Actions CI is green on Node 22 when the project is ready for that external gate
-- [ ] `npm run verify:node22-local` passes when a local Node 22 runtime is available
+- [x] `npm run verify:node22-local` passes when a local Node 22 runtime is available
 - [x] repository remains private while external release gates are still pending
 
 ## Deferred External Gate

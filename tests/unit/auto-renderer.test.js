@@ -71,9 +71,95 @@ function createCanvas(gl) {
     };
 }
 
+function installFakeWebGpu() {
+    let resolveLoss;
+    const lost = new Promise((resolve) => {
+        resolveLoss = resolve;
+    });
+
+    const context = {
+        configure: vi.fn(),
+        getCurrentTexture: vi.fn(() => ({
+            createView: () => ({}),
+        })),
+    };
+
+    const device = {
+        lost,
+        queue: {
+            submit: vi.fn(),
+            writeBuffer: vi.fn(),
+            writeTexture: vi.fn(),
+        },
+        createSampler: vi.fn(() => ({})),
+        createShaderModule: vi.fn(() => ({})),
+        createRenderPipeline: vi.fn(() => ({
+            getBindGroupLayout: () => ({}),
+        })),
+        createTexture: vi.fn(() => ({
+            createView: () => ({}),
+            destroy: vi.fn(),
+        })),
+        createBuffer: vi.fn(() => ({
+            destroy: vi.fn(),
+        })),
+        createBindGroup: vi.fn(() => ({})),
+        createCommandEncoder: vi.fn(() => ({
+            beginRenderPass: () => ({
+                setPipeline: vi.fn(),
+                setBindGroup: vi.fn(),
+                draw: vi.fn(),
+                end: vi.fn(),
+            }),
+            finish: () => ({}),
+        })),
+    };
+
+    const adapter = {
+        requestDevice: vi.fn(async () => device),
+    };
+
+    const requestAdapter = vi.fn(async () => adapter);
+    Object.defineProperty(globalThis.navigator, 'gpu', {
+        configurable: true,
+        value: {
+            requestAdapter,
+            getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+        },
+    });
+    globalThis.GPUTextureUsage = { TEXTURE_BINDING: 1, COPY_DST: 2 };
+    globalThis.GPUBufferUsage = { UNIFORM: 1, COPY_DST: 2 };
+
+    return {
+        context,
+        requestAdapter,
+        resolveLoss,
+    };
+}
+
+function createHybridCanvas({ gl, webgpuContext }) {
+    return {
+        width: 256,
+        height: 256,
+        clientWidth: 256,
+        clientHeight: 256,
+        getContext: vi.fn((type) => {
+            if (type === 'webgl') {
+                return gl;
+            }
+            if (type === 'webgpu') {
+                return webgpuContext;
+            }
+            return null;
+        }),
+    };
+}
+
 describe('AutoRenderer', () => {
     beforeEach(() => {
         delete globalThis.navigator.gpu;
+        delete globalThis.GPUTextureUsage;
+        delete globalThis.GPUBufferUsage;
     });
 
     it('falls back to WebGL when WebGPU is unavailable', async () => {
@@ -81,5 +167,73 @@ describe('AutoRenderer', () => {
 
         await renderer.init();
         expect(renderer.getKind()).toBe('webgl');
+        expect(renderer.getLastInitReport()).toMatchObject({
+            selectedKind: 'webgl',
+            usedFallback: true,
+        });
+    });
+
+    it('disables WebGPU for the rest of the auto session after device loss', async () => {
+        const webGpuHarness = installFakeWebGpu();
+        const lifecycleSpy = vi.fn();
+        const renderer = new AutoRenderer(createHybridCanvas({
+            gl: createMinimalWebGlContext(),
+            webgpuContext: webGpuHarness.context,
+        }), {
+            preference: 'auto',
+            onLifecycleEvent: lifecycleSpy,
+        });
+
+        await renderer.init();
+        expect(renderer.getKind()).toBe('webgpu');
+        expect(webGpuHarness.requestAdapter).toHaveBeenCalledTimes(1);
+
+        webGpuHarness.resolveLoss({
+            reason: 'unknown',
+            message: 'WebGPU device lost during auto-renderer test.',
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(lifecycleSpy).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'renderer-fallback-armed',
+            rendererKind: 'webgpu',
+            nextKind: 'webgl',
+        }));
+        expect(lifecycleSpy).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'device-loss',
+            rendererKind: 'webgpu',
+            autoFallbackArmed: true,
+        }));
+
+        await renderer.init();
+
+        expect(renderer.getKind()).toBe('webgl');
+        expect(webGpuHarness.requestAdapter).toHaveBeenCalledTimes(1);
+        expect(renderer.getLastInitReport()).toMatchObject({
+            selectedKind: 'webgl',
+            disabledKinds: ['webgpu'],
+            usedFallback: false,
+        });
+    });
+
+    it('can seed the auto session with disabled WebGPU kinds after recovery', async () => {
+        const webGpuHarness = installFakeWebGpu();
+        const renderer = new AutoRenderer(createHybridCanvas({
+            gl: createMinimalWebGlContext(),
+            webgpuContext: webGpuHarness.context,
+        }), {
+            preference: 'auto',
+            disabledKinds: ['webgpu'],
+        });
+
+        await renderer.init();
+
+        expect(renderer.getKind()).toBe('webgl');
+        expect(webGpuHarness.requestAdapter).not.toHaveBeenCalled();
+        expect(renderer.getLastInitReport()).toMatchObject({
+            selectedKind: 'webgl',
+            disabledKinds: ['webgpu'],
+        });
     });
 });

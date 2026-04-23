@@ -13,16 +13,17 @@ browser-facing `envi-http` contract:
 3. browser CORS must allow direct fetches from a CubeScope demo origin
 4. the dataset license and provenance must be clear enough to document publicly
 
-## Current Local Baseline
+## Current Shipped Baseline
 
-The repository already ships one deterministic local remote sample:
+The repository now ships two remote-sample tiers:
 
 - catalog file: `public/samples/remote-samples.json`
-- current sample id: `repo-local-http`
-- current validation tier: `local`
+- deterministic local sample id: `repo-local-http`
+- shipped public sample id: `snowex-aviris-ng-sasp`
 
-That path proves the code and packaging boundary. It does not yet prove a
-stable third-party public host.
+The local tier proves the code and packaging boundary. The public tier proves a
+real third-party browser-visible host and should continue to be treated as an
+external validation surface rather than a deterministic local fixture.
 
 ## Qualification Checks
 
@@ -112,17 +113,25 @@ After a candidate passes qualification:
 
 ## Current External Candidate Notes
 
-As of `2026-04-17`, one investigated public candidate is:
+As of `2026-04-23`, the shipped public sample is:
+
+- source: GitHub `snowex-hackweek/tutorial-data`
+- file pair:
+  - `SnowEx-2022/AVIRIS-NG/ang20210411t181022_rfl_v2z1a_img_SASP.hdr`
+  - `SnowEx-2022/AVIRIS-NG/ang20210411t181022_rfl_v2z1a_img_SASP`
+- shipped sample id: `snowex-aviris-ng-sasp`
+- result:
+  - direct header fetch: reachable
+  - byte-range GET: returns `206`
+  - browser CORS: allowed (`Access-Control-Allow-Origin: *`)
+  - public-tier browser validation: passed
+
+An earlier investigated candidate remains useful as a negative example:
 
 - source: Zenodo `HyPyRameter Test Data`
-- file pair:
-  - `EMIT_L2A_RFL_001_20230329T145406_2308809_052_reflectance_cropped.hdr`
-  - `EMIT_L2A_RFL_001_20230329T145406_2308809_052_reflectance_cropped.img`
 - result:
   - direct header fetch: reachable
   - byte-range GET: returns `206`
   - browser CORS: not observed in the probe response
-- conclusion: promising as a data source, but not yet browser-eligible for the
-  shipped `envi-http` public catalog
-
-This note should be updated when a candidate is re-tested or replaced.
+- conclusion: promising as a data source, but not browser-eligible for the
+  shipped `envi-http` public catalog without a host-side CORS change

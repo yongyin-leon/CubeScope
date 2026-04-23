@@ -105,6 +105,9 @@ class CubeViewer extends EventEmitter {
             enableBackgroundStats: this.#options.enableBackgroundStats ?? true,
             enableTilePreloading: this.#options.enableTilePreloading ?? true,
             rendererPreference: this.#options.rendererPreference ?? 'auto',
+            onCanvasReplaced: (nextCanvas) => {
+                this.#canvas = nextCanvas;
+            },
         });
 
         this.#attachInternalListeners();

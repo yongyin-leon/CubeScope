@@ -26,6 +26,14 @@ viewer core，供后续分析插件和下游应用构建。
 - 当前浏览器目标：优先 WebGPU，同时提供 WebGL 兼容渲染路径
 - 本地 smoke / benchmark 验证链：固定使用 WebGL 兼容模式，确保私有 alpha 可复现
 
+## 运行时支持策略
+
+- 官方发布与复现基线：`Node 22.x`
+- 更高版本 Node 可以用于本地开发，但不替代发布门槛
+- 当前 alpha 的权威本地运行时复验入口：`npm run verify:node22-local`
+
+详细说明见：[docs/RUNTIME_SUPPORT_POLICY.md](docs/RUNTIME_SUPPORT_POLICY.md)
+
 ## 仓库内已验证的快速开始路径
 
 这是当前 alpha 的主可复现路径。
@@ -239,6 +247,9 @@ npm run report:alpha
 # 运行 contract tests 与浏览器 smoke tests
 npm run test
 
+# 生成本地 Chromium 渲染 / 浏览器矩阵报告
+npm run report:browser-matrix
+
 # 检查当前本地 toolchain，并探测 Node 22 运行时是否可用
 npm run report:toolchain
 
@@ -257,6 +268,9 @@ npm run validate:sample-candidate -- --id candidate-id --title "Candidate" --hea
 # 验证已注册远程样例的 HTTP range 与 demo 载入链
 npm run validate:samples
 
+# 验证 shipped public remote sample，并写出 public-tier 报告
+CUBESCOPE_SAMPLE_TIER=public CUBESCOPE_SAMPLE_REPORT_PATH=output/samples/public-latest.json npm run validate:samples
+
 # 在检测到的本地 Node 22 运行时下重跑 alpha 验证链
 npm run verify:node22-local
 
@@ -271,8 +285,21 @@ npm run verify:alpha
 
 - 架构文档：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - API 合约：[docs/API.md](docs/API.md)
+- 运行时支持策略：[docs/RUNTIME_SUPPORT_POLICY.md](docs/RUNTIME_SUPPORT_POLICY.md)
+- 软件论文主稿初稿：[docs/SOFTWARE_PAPER_DRAFT_v1.md](docs/SOFTWARE_PAPER_DRAFT_v1.md)
+- 软件论文主稿中文译稿：[docs/SOFTWARE_PAPER_DRAFT_v1_zh-CN.md](docs/SOFTWARE_PAPER_DRAFT_v1_zh-CN.md)
+- SoftwareX 提交长度稿：[docs/SOFTWAREX_MANUSCRIPT_v1.md](docs/SOFTWAREX_MANUSCRIPT_v1.md)
+- SoftwareX 提交长度稿 v2：[docs/SOFTWAREX_MANUSCRIPT_v2.md](docs/SOFTWAREX_MANUSCRIPT_v2.md)
+- SoftwareX 提交长度稿 v3：[docs/SOFTWAREX_MANUSCRIPT_v3.md](docs/SOFTWAREX_MANUSCRIPT_v3.md)
+- SoftwareX 提交长度稿 v4：[docs/SOFTWAREX_MANUSCRIPT_v4.md](docs/SOFTWAREX_MANUSCRIPT_v4.md)
+- SoftwareX 投稿包草案：[docs/SOFTWAREX_SUBMISSION_PACKAGE_v1.md](docs/SOFTWAREX_SUBMISSION_PACKAGE_v1.md)
+- SoftwareX 模板输入包：[docs/SOFTWAREX_TEMPLATE_INPUT_PACKET_v1.md](docs/SOFTWAREX_TEMPLATE_INPUT_PACKET_v1.md)
+- SoftwareX 投稿填空清单：[docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md](docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md)
+- SoftwareX cover letter 草案：[docs/SOFTWAREX_COVER_LETTER_DRAFT_v1.md](docs/SOFTWAREX_COVER_LETTER_DRAFT_v1.md)
+- SoftwareX cover letter 草案 v2：[docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md](docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md)
 - Blueprint：[docs/CUBESCOPE_BLUEPRINT.md](docs/CUBESCOPE_BLUEPRINT.md)
 - 路线图：[docs/ROADMAP.md](docs/ROADMAP.md)
+- 阶段报告（2026-04-23）：[docs/STAGE_REPORT_2026-04-23.md](docs/STAGE_REPORT_2026-04-23.md)
 - 文档评审：[docs/DOCUMENTATION_REVIEW.md](docs/DOCUMENTATION_REVIEW.md)
 - 下一阶段任务：[docs/NEXT_DEVELOPMENT_TASKS.md](docs/NEXT_DEVELOPMENT_TASKS.md)
 - 远程样例工作流：[docs/REMOTE_SAMPLE_WORKFLOW.md](docs/REMOTE_SAMPLE_WORKFLOW.md)
@@ -312,7 +339,22 @@ core that future analysis plugins and downstream applications can build on.
 - repository visibility: private until the alpha acceptance gates pass
 - package format: ESM-only
 - current browser target: prefer WebGPU, with a WebGL compatibility renderer available
+- `rendererPreference: 'auto'` now degrades to WebGL for the rest of the viewer
+  session after a WebGPU device-loss event; when the browser requires a fresh
+  drawing context to cross from WebGPU to WebGL, CubeScope recreates the render
+  canvas and resumes on the WebGL compatibility path
 - local smoke / benchmark verification: pinned to the WebGL compatibility path for deterministic private-alpha validation
+
+## Runtime Support Policy
+
+- official release and reproducibility baseline: `Node 22.x`
+- newer Node versions may still be used for local development, but they do not
+  replace the release gate
+- the authoritative local runtime verification entrypoint is
+  `npm run verify:node22-local`
+
+See [docs/RUNTIME_SUPPORT_POLICY.md](docs/RUNTIME_SUPPORT_POLICY.md) for the
+full policy.
 
 ## Verified Quickstart From This Repository
 
@@ -499,6 +541,9 @@ npm run report:alpha
 # Run contract and browser smoke tests
 npm run test
 
+# Generate the local Chromium renderer/browser-matrix report
+npm run report:browser-matrix
+
 # Inspect the local toolchain and discover whether a Node 22 runtime is available
 npm run report:toolchain
 
@@ -517,6 +562,9 @@ npm run validate:sample-candidate -- --id candidate-id --title "Candidate" --hea
 # Validate the registered remote-sample catalog against transport + demo load
 npm run validate:samples
 
+# Validate the shipped public remote sample and write the public-tier report
+CUBESCOPE_SAMPLE_TIER=public CUBESCOPE_SAMPLE_REPORT_PATH=output/samples/public-latest.json npm run validate:samples
+
 # Rerun the alpha verification chain under a detected local Node 22 runtime
 npm run verify:node22-local
 
@@ -531,8 +579,21 @@ npm run verify:alpha
 
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - API contract: [docs/API.md](docs/API.md)
+- Runtime support policy: [docs/RUNTIME_SUPPORT_POLICY.md](docs/RUNTIME_SUPPORT_POLICY.md)
+- Software paper draft v1: [docs/SOFTWARE_PAPER_DRAFT_v1.md](docs/SOFTWARE_PAPER_DRAFT_v1.md)
+- Chinese translation of the full software paper draft: [docs/SOFTWARE_PAPER_DRAFT_v1_zh-CN.md](docs/SOFTWARE_PAPER_DRAFT_v1_zh-CN.md)
+- SoftwareX submission-length manuscript v1: [docs/SOFTWAREX_MANUSCRIPT_v1.md](docs/SOFTWAREX_MANUSCRIPT_v1.md)
+- SoftwareX submission-length manuscript v2: [docs/SOFTWAREX_MANUSCRIPT_v2.md](docs/SOFTWAREX_MANUSCRIPT_v2.md)
+- SoftwareX submission-length manuscript v3: [docs/SOFTWAREX_MANUSCRIPT_v3.md](docs/SOFTWAREX_MANUSCRIPT_v3.md)
+- SoftwareX submission-length manuscript v4: [docs/SOFTWAREX_MANUSCRIPT_v4.md](docs/SOFTWAREX_MANUSCRIPT_v4.md)
+- SoftwareX submission package v1: [docs/SOFTWAREX_SUBMISSION_PACKAGE_v1.md](docs/SOFTWAREX_SUBMISSION_PACKAGE_v1.md)
+- SoftwareX template input packet v1: [docs/SOFTWAREX_TEMPLATE_INPUT_PACKET_v1.md](docs/SOFTWAREX_TEMPLATE_INPUT_PACKET_v1.md)
+- SoftwareX submission fill-in checklist v1: [docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md](docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md)
+- SoftwareX cover letter draft v1: [docs/SOFTWAREX_COVER_LETTER_DRAFT_v1.md](docs/SOFTWAREX_COVER_LETTER_DRAFT_v1.md)
+- SoftwareX cover letter draft v2: [docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md](docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md)
 - Blueprint: [docs/CUBESCOPE_BLUEPRINT.md](docs/CUBESCOPE_BLUEPRINT.md)
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
+- Stage report (2026-04-23): [docs/STAGE_REPORT_2026-04-23.md](docs/STAGE_REPORT_2026-04-23.md)
 - Documentation review: [docs/DOCUMENTATION_REVIEW.md](docs/DOCUMENTATION_REVIEW.md)
 - Next task list: [docs/NEXT_DEVELOPMENT_TASKS.md](docs/NEXT_DEVELOPMENT_TASKS.md)
 - Reproducibility steps: [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)

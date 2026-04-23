@@ -168,6 +168,7 @@ export function createHttpRangeDataSource(url, options = {}) {
     const id = options.id ?? `http-range:${normalizedUrl}`;
     const headers = normalizeHeaders(options.headers);
     let cachedSize = Number.isInteger(options.size) && options.size >= 0 ? options.size : undefined;
+    let cachedFullBufferPromise = null;
 
     async function resolveSize() {
         if (cachedSize != null) {
@@ -263,19 +264,28 @@ export function createHttpRangeDataSource(url, options = {}) {
             return response.arrayBuffer();
         },
         async readAll() {
-            const response = await fetchOrThrow(
-                normalizedUrl,
-                {
-                    method: 'GET',
-                    headers,
-                },
-                `HTTP full read for ${name}`
-            );
-            const contentLength = Number(response.headers.get('content-length'));
-            if (Number.isInteger(contentLength) && contentLength >= 0) {
-                cachedSize = contentLength;
+            if (!cachedFullBufferPromise) {
+                cachedFullBufferPromise = (async () => {
+                    const response = await fetchOrThrow(
+                        normalizedUrl,
+                        {
+                            method: 'GET',
+                            headers,
+                        },
+                        `HTTP full read for ${name}`
+                    );
+                    const contentLength = Number(response.headers.get('content-length'));
+                    if (Number.isInteger(contentLength) && contentLength >= 0) {
+                        cachedSize = contentLength;
+                    }
+                    return response.arrayBuffer();
+                })().catch((error) => {
+                    cachedFullBufferPromise = null;
+                    throw error;
+                });
             }
-            return response.arrayBuffer();
+
+            return cachedFullBufferPromise;
         },
         async close() {},
     };

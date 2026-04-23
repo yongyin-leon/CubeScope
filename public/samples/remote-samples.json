@@ -13,6 +13,17 @@
       "headerUrl": "/fixtures/cubescope-mini-cube.hdr",
       "dataUrl": "/fixtures/cubescope-mini-cube.img",
       "license": "MIT"
+    },
+    {
+      "id": "snowex-aviris-ng-sasp",
+      "title": "SnowEx AVIRIS-NG SASP",
+      "kind": "envi-http",
+      "availability": "public",
+      "validationTier": "public",
+      "description": "Public AVIRIS-NG SnowEx tutorial subset mirrored from the snowex-hackweek/tutorial-data repository for browser-visible ENVI HTTP validation.",
+      "headerUrl": "https://raw.githubusercontent.com/snowex-hackweek/tutorial-data/main/SnowEx-2022/AVIRIS-NG/ang20210411t181022_rfl_v2z1a_img_SASP.hdr",
+      "dataUrl": "https://raw.githubusercontent.com/snowex-hackweek/tutorial-data/main/SnowEx-2022/AVIRIS-NG/ang20210411t181022_rfl_v2z1a_img_SASP",
+      "license": "MIT"
     }
   ]
 }

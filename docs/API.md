@@ -59,6 +59,11 @@ type RuntimeConfig = {
 
 type RendererPreference = 'auto' | 'webgpu' | 'webgl'
 
+// Current alpha behavior:
+// - 'auto' prefers WebGPU first
+// - after a WebGPU device-loss event, the current viewer session may recover
+//   through WebGL instead of repeatedly retrying the lost adapter
+
 type CubeDataType =
   | 'u8'
   | 'i16'
@@ -244,6 +249,8 @@ The alpha implementation is expected to honor these rules:
    viewer state
 5. switching source acts as an implicit cancel-all for tracked requests from
    the previous source
+6. when `rendererPreference` is `auto`, a WebGPU device-loss event may cause
+   the current viewer session to recover through WebGL for subsequent draws
 
 ## Non-Goals For `0.1.0-alpha.1`
 

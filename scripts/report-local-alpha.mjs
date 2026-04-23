@@ -7,10 +7,13 @@ const scriptDir = fileURLToPath(new URL('.', import.meta.url));
 const projectRoot = resolve(scriptDir, '..');
 const packageJsonPath = resolve(projectRoot, 'package.json');
 const benchmarkPath = resolve(projectRoot, 'output/benchmark/latest.json');
+const browserMatrixPath = resolve(projectRoot, 'output/browser-matrix/latest.json');
 const packConsumerPath = resolve(projectRoot, 'output/pack-consumer/latest.json');
 const sampleCatalogPath = resolve(projectRoot, 'output/samples/latest.json');
+const publicSampleCatalogPath = resolve(projectRoot, 'output/samples/public-latest.json');
 const toolchainReportPath = resolve(projectRoot, 'output/toolchain/local-toolchain.json');
 const node22VerificationPath = resolve(projectRoot, 'output/toolchain/node22-local-verification.json');
+const shippedRemoteCatalogPath = resolve(projectRoot, 'public/samples/remote-samples.json');
 const outputDir = resolve(projectRoot, 'output/alpha');
 const outputPath = resolve(outputDir, 'local-alpha-summary.json');
 
@@ -51,16 +54,27 @@ function extractLeadingInteger(value) {
 
 const packageJson = readJson(packageJsonPath);
 const benchmark = readJson(benchmarkPath);
+const browserMatrix = readOptionalJson(browserMatrixPath);
 const packConsumer = readJson(packConsumerPath);
 const sampleCatalog = readJson(sampleCatalogPath);
+const publicSampleCatalog = readOptionalJson(publicSampleCatalogPath);
 const toolchainReport = readOptionalJson(toolchainReportPath);
 const node22Verification = readOptionalJson(node22VerificationPath);
+const shippedRemoteCatalog = readOptionalJson(shippedRemoteCatalogPath);
 const targetNodeMajor = extractLeadingInteger(packageJson.engines?.node);
 const runtimeNodeMajor = extractLeadingInteger(process.version);
 const inferredNode22LocalRuntimeStatus = targetNodeMajor != null && runtimeNodeMajor === targetNodeMajor
     ? 'passed'
     : 'pending';
 const node22LocalRuntimeStatus = node22Verification?.status ?? inferredNode22LocalRuntimeStatus;
+const shippedPublicRemoteSamples = (shippedRemoteCatalog?.samples ?? []).filter(
+    (sample) => sample.availability === 'public' && sample.validationTier === 'public'
+);
+const publicRemoteSampleStatus = publicSampleCatalog?.totalSamples > 0
+    && (publicSampleCatalog.samples ?? []).every((sample) => sample.validationTier === 'public' && sample.browser?.loaded === true)
+    && shippedPublicRemoteSamples.length > 0
+    ? 'passed'
+    : 'pending';
 
 function buildNode22Note() {
     if (node22LocalRuntimeStatus === 'passed') {
@@ -104,6 +118,18 @@ const summary = {
             runtime: benchmark.runtime,
             fixture: benchmark.fixture,
         },
+        browserMatrix: browserMatrix
+            ? {
+                path: 'output/browser-matrix/latest.json',
+                summary: browserMatrix.summary,
+                scenarios: browserMatrix.scenarios?.map((scenario) => ({
+                    id: scenario.id,
+                    rendererPreference: scenario.rendererPreference,
+                    rendererStatus: scenario.rendererStatus,
+                    status: scenario.status,
+                })) ?? [],
+            }
+            : null,
         packConsumer: {
             path: 'output/pack-consumer/latest.json',
             tarball: packConsumer.tarball,
@@ -116,6 +142,26 @@ const summary = {
             totalSamples: sampleCatalog.totalSamples,
             samples: sampleCatalog.samples,
         },
+        publicSampleCatalog: publicSampleCatalog
+            ? {
+                path: 'output/samples/public-latest.json',
+                tier: publicSampleCatalog.tier,
+                totalSamples: publicSampleCatalog.totalSamples,
+                samples: publicSampleCatalog.samples,
+            }
+            : null,
+        shippedRemoteCatalog: shippedRemoteCatalog
+            ? {
+                path: 'public/samples/remote-samples.json',
+                totalSamples: shippedRemoteCatalog.samples?.length ?? 0,
+                publicSamples: shippedPublicRemoteSamples.map((sample) => ({
+                    id: sample.id,
+                    title: sample.title,
+                    availability: sample.availability,
+                    validationTier: sample.validationTier,
+                })),
+            }
+            : null,
         toolchain: toolchainReport
             ? {
                 path: 'output/toolchain/local-toolchain.json',
@@ -135,8 +181,9 @@ const summary = {
         localAlphaVerification: 'passed',
         deterministicHttpFixture: 'passed',
         registeredRemoteSampleCatalog: 'passed',
-        publicRemoteSample: 'pending',
+        publicRemoteSample: publicRemoteSampleStatus,
         webglFallback: 'passed',
+        browserMatrixLocal: browserMatrix?.summary?.overallStatus ?? 'pending',
         node22LocalRuntime: node22LocalRuntimeStatus,
         node22ExternalCi: 'deferred',
         repositoryVisibility: 'private',
@@ -145,8 +192,13 @@ const summary = {
         'This summary captures the locally verified alpha gate only.',
         'The local verification path now covers both envi-local and deterministic same-origin envi-http scenarios.',
         'Registered remote samples are validated locally through the sample catalog and example-page smoke path.',
-        'HTTP range initial-view validation is part of the local gate; a stable public remote sample is still pending.',
+        publicRemoteSampleStatus === 'passed'
+            ? `A shipped public remote sample is now validated through output/samples/public-latest.json (${shippedPublicRemoteSamples.map((sample) => sample.id).join(', ')}).`
+            : 'HTTP range initial-view validation is part of the local gate; a stable public remote sample is still pending.',
         'Local smoke and benchmark verification now pin the renderer to WebGL compatibility mode for deterministic browser validation, while the runtime default remains auto.',
+        browserMatrix
+            ? `The local Chromium browser matrix currently reports ${browserMatrix.summary?.overallStatus ?? 'unknown'} across the scripted renderer preferences.`
+            : 'A local browser-matrix report has not been generated yet.',
         buildNode22Note(),
         'Node 22 remains the target toolchain for public release, but external CI confirmation is intentionally deferred for now.',
     ],

@@ -11,9 +11,14 @@ export class AutoRenderer {
     #options;
     #delegate = null;
     #kind = null;
+    #sessionDisabledKinds = new Set();
+    #lastInitReport = null;
 
     constructor(canvas, options = {}) {
         this.#canvas = canvas;
+        this.#sessionDisabledKinds = new Set(
+            Array.isArray(options.disabledKinds) ? options.disabledKinds : []
+        );
         this.#options = {
             cachePolicy: options.cachePolicy ?? DEFAULT_RENDER_TILE_CACHE_POLICY,
             onLifecycleEvent: options.onLifecycleEvent ?? null,
@@ -25,17 +30,19 @@ export class AutoRenderer {
         return this.#kind;
     }
 
+    getLastInitReport() {
+        return this.#lastInitReport;
+    }
+
     getCachePolicy() {
         return this.#delegate?.getCachePolicy?.() ?? this.#options.cachePolicy;
     }
 
     async init() {
-        const order = this.#options.preference === 'webgl'
-            ? ['webgl']
-            : this.#options.preference === 'webgpu'
-                ? ['webgpu']
-                : ['webgpu', 'webgl'];
+        const previousKind = this.#kind;
+        const order = this.#resolveInitializationOrder();
         const errors = [];
+        const attempts = [];
 
         for (const kind of order) {
             const candidate = this.#createRenderer(kind);
@@ -44,13 +51,35 @@ export class AutoRenderer {
                 this.#delegate?.destroy?.();
                 this.#delegate = candidate;
                 this.#kind = kind;
+                attempts.push(Object.freeze({
+                    kind,
+                    status: 'ready',
+                    message: null,
+                }));
+                this.#lastInitReport = this.#createInitReport({
+                    previousKind,
+                    order,
+                    selectedKind: kind,
+                    attempts,
+                });
                 return;
             } catch (error) {
                 errors.push(`${kind}: ${error.message}`);
+                attempts.push(Object.freeze({
+                    kind,
+                    status: 'failed',
+                    message: error.message,
+                }));
                 candidate.destroy?.();
             }
         }
 
+        this.#lastInitReport = this.#createInitReport({
+            previousKind,
+            order,
+            selectedKind: null,
+            attempts,
+        });
         throw new Error(`Renderer initialization failed (${errors.join(' | ')})`);
     }
 
@@ -91,6 +120,67 @@ export class AutoRenderer {
         };
     }
 
+    #resolveInitializationOrder() {
+        const baseOrder = this.#options.preference === 'webgl'
+            ? ['webgl']
+            : this.#options.preference === 'webgpu'
+                ? ['webgpu']
+                : ['webgpu', 'webgl'];
+
+        if (this.#options.preference !== 'auto' || this.#sessionDisabledKinds.size === 0) {
+            return baseOrder;
+        }
+
+        const filteredOrder = baseOrder.filter((kind) => !this.#sessionDisabledKinds.has(kind));
+        return filteredOrder.length > 0 ? filteredOrder : ['webgl'];
+    }
+
+    #createInitReport({ previousKind = null, order = [], selectedKind = null, attempts = [] } = {}) {
+        return Object.freeze({
+            preference: this.#options.preference,
+            previousKind,
+            selectedKind,
+            usedFallback: Boolean(selectedKind && order[0] !== selectedKind),
+            attemptedKinds: Object.freeze(Array.from(attempts)),
+            disabledKinds: Object.freeze(Array.from(this.#sessionDisabledKinds)),
+        });
+    }
+
+    #notifyLifecycleEvent(event) {
+        if (typeof this.#options.onLifecycleEvent === 'function') {
+            this.#options.onLifecycleEvent(Object.freeze({ ...event }));
+        }
+    }
+
+    #handleDelegateLifecycleEvent(kind, event) {
+        if (!event) {
+            return;
+        }
+
+        if (kind === 'webgpu'
+            && event.type === 'device-loss'
+            && this.#options.preference === 'auto') {
+            this.#sessionDisabledKinds.add('webgpu');
+            this.#notifyLifecycleEvent({
+                type: 'renderer-fallback-armed',
+                rendererKind: 'webgpu',
+                nextKind: 'webgl',
+                reason: event.reason ?? 'device-loss',
+                message: 'Auto renderer will prefer WebGL after WebGPU device loss.',
+                disabledKinds: Array.from(this.#sessionDisabledKinds),
+            });
+        }
+
+        this.#notifyLifecycleEvent({
+            ...event,
+            rendererKind: kind,
+            disabledKinds: Array.from(this.#sessionDisabledKinds),
+            autoFallbackArmed: kind === 'webgpu'
+                && event.type === 'device-loss'
+                && this.#options.preference === 'auto',
+        });
+    }
+
     #createRenderer(kind) {
         if (kind === 'webgl') {
             return new WebGlRenderer(this.#canvas, {
@@ -100,7 +190,7 @@ export class AutoRenderer {
 
         return new WebGpuRenderer(this.#canvas, {
             cachePolicy: this.#options.cachePolicy,
-            onLifecycleEvent: this.#options.onLifecycleEvent,
+            onLifecycleEvent: (event) => this.#handleDelegateLifecycleEvent(kind, event),
         });
     }
 }

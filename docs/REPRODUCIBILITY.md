@@ -11,6 +11,14 @@ CubeScope alpha.
 - Rust target: `wasm32-unknown-unknown`
 - `wasm-bindgen-cli 0.2.100`
 
+The runtime support policy is:
+
+- `Node 22.x` is the official release and reproducibility baseline
+- newer Node versions may still be used for local development
+- passing on a newer runtime does not replace the `Node 22` gate
+
+See `docs/RUNTIME_SUPPORT_POLICY.md` for the full policy.
+
 ## Fresh Setup
 
 ```bash
@@ -35,6 +43,9 @@ npm run build
 ```bash
 # Contract tests + browser smoke
 npm run test
+
+# Local Chromium renderer/browser matrix report
+npm run report:browser-matrix
 
 # Inspect the current local toolchain and Node 22 runtime availability
 npm run report:toolchain
@@ -78,6 +89,7 @@ npm run verify:alpha
 - `dist/worker.js`
 - `dist/pkg/*`
 - `output/benchmark/latest.json`
+- `output/browser-matrix/latest.json`
 - `output/samples/latest.json`
 - `output/pack-consumer/latest.json`
 - `output/toolchain/local-toolchain.json`
@@ -106,6 +118,10 @@ npm run verify:alpha
   `public/samples/remote-samples.json`, and `npm run validate:samples`
   validates the local sample tier against both transport checks and the demo
   load path.
+- The shipped catalog now also includes one validated public remote sample,
+  `snowex-aviris-ng-sasp`, and `CUBESCOPE_SAMPLE_TIER=public
+  CUBESCOPE_SAMPLE_REPORT_PATH=output/samples/public-latest.json npm run
+  validate:samples` reproduces that external browser-visible path.
 - `npm run create:sample-catalog` can generate a preview catalog for an
   external candidate, and the smoke/benchmark helpers can be redirected with
   `CUBESCOPE_SAMPLE_CATALOG_URL` plus `CUBESCOPE_REGISTERED_SAMPLE_ID`.
@@ -116,10 +132,18 @@ npm run verify:alpha
 - `npm run report:toolchain` records whether a local Node 22 runtime is
   discoverable, and `npm run verify:node22-local` is the dedicated entrypoint
   for rerunning the alpha gate under that target runtime.
+- `npm run report:browser-matrix` records the locally observed Chromium
+  behavior for both `rendererPreference=webgl` and `rendererPreference=auto`
+  against the deterministic local ENVI fixture, including the observed active
+  renderer kind and any session-level fallback arming.
 - Candidate public sources should first pass `npm run qualify:sample` before
   they are added to the shipped catalog.
-- A truly public external remote sample is still not part of the deterministic
-  gate; that remains a later documentation and outreach task.
+- The deterministic local gate remains separate from the public remote-sample
+  gate, but the repository now ships one validated external ENVI sample and
+  records its smoke output under `output/samples/public-latest.json`.
 - `npm run report:alpha` records the current local verification runtime
   separately from the target toolchain, so a workstation running a newer Node
   can still document that Node 22 remains the intended public-release target.
+- If the repository later changes its official Node baseline, the change should
+  be reflected in `package.json`, `.nvmrc`, `.node-version`, this document, and
+  the local verification/report scripts in the same update.

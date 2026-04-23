@@ -15,6 +15,51 @@ The next wave should be boundary-first:
 4. close release gates
 5. then expand capability
 
+## Runtime Refactor Closure Snapshot (2026-04-23)
+
+The internal runtime seam floor is now real in code.
+
+What already exists:
+
+- `src/runtime/render-session.js`
+- `src/runtime/work-scheduler.js`
+- `src/runtime/worker-message-router.js`
+- `src/runtime/runtime-reaction-plan.js`
+- `src/runtime/runtime-work-executor.js`
+- `src/runtime/runtime-lifecycle-controller.js`
+- `src/runtime/runtime-transition-controller.js`
+- `src/runtime/runtime-view-controller.js`
+- `src/runtime/worker-dispatch-policy.js`
+- `src/runtime/worker-pool.js`
+- `src/runtime/runtime-policy.js`
+
+What still intentionally remains in `src/runtime/viewer-runtime.js`:
+
+- public API glue and event emission
+- worker bootstrap and tracked request registration
+- spectrum request dispatch and pending-spectrum resolution
+- source invalidation glue and cancel broadcasting
+- DOM interaction wiring
+- top-level orchestration across the extracted runtime helpers
+
+Implication:
+
+- do not keep splitting the runtime into smaller controllers by default
+- prefer release-facing alpha gates and user-visible capability work unless one
+  of the remaining inline responsibilities becomes a real blocker
+
+Release-gate status after the `2026-04-23` local verification pass:
+
+- `npm run verify:alpha` now completes successfully on the current private
+  workstation runtime
+- local browser-matrix validation now passes for both forced `webgl` and
+  `auto` renderer preferences
+- a shipped public remote sample now exists and passes the public-tier browser
+  validation path
+- `npm run verify:node22-local` now passes on a real local Node 22 runtime
+- the remaining deferred external gate is GitHub Actions confirmation once the
+  repository is ready for that public-facing step
+
 ## Global Definition Of Done
 
 Architecture-shaping tasks are only complete when all three checks pass:
@@ -255,6 +300,36 @@ Done when:
 2. smoke coverage catches obvious renderer teardown regressions
 3. the release path can explain renderer ownership without guesswork
 
+### P2.4 Close the runtime shell deliberately
+
+Owner: viewer-core orchestration
+
+Status note:
+
+- `src/runtime/viewer-runtime.js` is no longer a monolithic implementation
+  class; most queueing, routing, lifecycle, transition, and draw-loop logic
+  now flows through dedicated runtime helpers
+- what remains inline is now mostly public-API glue, spectrum request flow,
+  cancel/invalidation glue, worker bootstrap, and DOM interaction wiring
+- the next wave should resist additional micro-extractions unless a new
+  consumer, test gap, or bug pressure proves they are needed
+
+Work:
+
+- document the remaining inline runtime responsibilities explicitly
+- stop using vague phrases like "too much orchestration" without naming the
+  actual residue
+- switch the next execution window back toward alpha gates and visible
+  capability work
+
+Done when:
+
+1. docs explicitly name the remaining `viewer-runtime` responsibilities
+2. roadmap and architecture docs no longer describe runtime residue only in
+   generic terms
+3. the next recommended sequence prioritizes release-facing and capability work
+   over more controller splitting
+
 ## P3: Release-Grade External Verification
 
 These tasks close the remaining gap between local alpha readiness and a public
@@ -412,8 +487,8 @@ Status note:
   coverage for both local and `envi-http` paths
 - the example app now exposes a registered remote-sample catalog, and local
   validation can exercise that catalog through a dedicated smoke/report path
-- a public remote sample is still pending, so this task is functionally mature
-  but not yet ecosystem-complete
+- a shipped public remote sample now exists, so this task is no longer blocked
+  on external ENVI sample availability
 
 Work:
 
