@@ -3,7 +3,10 @@
 Status snapshot:
 
 - local alpha verification completed on `2026-04-17`
-- remaining external gate: confirm GitHub Actions on Node 22 before public tag
+- local verification artifacts now include benchmark, pack-consumer, and alpha
+  summary reports under `output/`
+- GitHub Actions confirmation on Node 22 is intentionally deferred for now and
+  is not part of the current execution window
 
 - [x] package metadata matches `CubeScope` / `@cubescope/web`
 - [x] README quickstart matches the verified local workflow
@@ -12,11 +15,22 @@ Status snapshot:
 - [x] `npm run build:wasm` succeeds
 - [x] `npm run build` succeeds on a fresh local checkout
 - [x] `npm run test` succeeds
+- [x] `npm run report:toolchain` writes `output/toolchain/local-toolchain.json`
 - [x] `npm run benchmark` writes `output/benchmark/latest.json`
+- [x] `npm run validate:samples` writes `output/samples/latest.json`
 - [x] `npm run verify:pack` validates tarball install/import from an isolated consumer app
+- [x] `npm run report:alpha` writes `output/alpha/local-alpha-summary.json`
 - [x] synthetic fixture metadata is documented
-- [ ] GitHub Actions CI is green on Node 22
+- [x] registered remote-sample catalog is locally validated
+- [ ] GitHub Actions CI is green on Node 22 when the project is ready for that external gate
+- [ ] `npm run verify:node22-local` passes when a local Node 22 runtime is available
 - [x] repository remains private while external release gates are still pending
+
+## Deferred External Gate
+
+The current alpha can continue local hardening work without GitHub Actions.
+External CI remains a public-release gate, not a blocker for private local
+verification.
 
 ## CI Failure Triage
 

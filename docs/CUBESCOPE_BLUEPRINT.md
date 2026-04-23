@@ -95,8 +95,10 @@ Core themes that fit the product:
 
 1. multispectral and visible-light support through normalized band metadata and
    sensible default display logic
-2. georeferencing and spatial metadata normalization
-3. remote-readable ENVI through `DataSource` and `HTTP range`
+2. georeferencing follow-on after the first spatial metadata normalization and
+   affine pixel/world mapping slice
+3. remote-readable ENVI hardening through `DataSource`, `HTTP range`, and a
+   stable public sample path
 4. provenance/export metadata for reproducible downstream use
 
 These upgrades move CubeScope from "browser viewer" toward "scientific

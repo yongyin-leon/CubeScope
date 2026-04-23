@@ -350,6 +350,16 @@ Done when:
 
 Owner: metadata normalization and geospatial boundary
 
+Status note:
+
+- ENVI `map info` and `coordinate system string` now parse into first-class
+  metadata fields in the Rust header model
+- `src/formats/cube-header.js` now normalizes those fields into a stable
+  `spatialReference` contract with structured `mapInfo` and derived affine
+  transforms
+- docs now explicitly keep this work bounded to metadata and mapping, not
+  renderer reprojection
+
 Work:
 
 - parse ENVI spatial fields such as `map info` and coordinate system strings
@@ -367,6 +377,14 @@ Done when:
 
 Owner: geospatial interaction layer
 
+Status note:
+
+- `CubeViewer` and `CubeStore` now expose affine `pixelToWorld(...)` and
+  `worldToPixel(...)` helpers for local ENVI sources
+- the example app now reports pixel/world probe coordinates after clicks
+- overlay proof remains deferred; this task is now mostly about the overlay
+  follow-on rather than the core mapping API
+
 Work:
 
 - define `pixelToWorld` and `worldToPixel` around affine transforms
@@ -383,6 +401,19 @@ Done when:
 ### P4.5 Introduce the `DataSource` seam in code, then add `HTTP range`
 
 Owner: byte-access and remote-read boundary
+
+Status note:
+
+- the runtime now supports both `envi-local` and `envi-http` through the same
+  `DataSource`-based load path
+- workers now reconstruct byte sources from serializable descriptors instead of
+  assuming direct `File` objects in every request
+- the repo now includes a deterministic same-origin HTTP fixture and benchmark
+  coverage for both local and `envi-http` paths
+- the example app now exposes a registered remote-sample catalog, and local
+  validation can exercise that catalog through a dedicated smoke/report path
+- a public remote sample is still pending, so this task is functionally mature
+  but not yet ecosystem-complete
 
 Work:
 

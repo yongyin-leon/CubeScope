@@ -90,6 +90,8 @@ pub struct EnviHeader {
     pub header_offset: usize,
     pub file_type: Option<String>,
     pub sensor_type: Option<String>,
+    pub map_info: Option<String>,
+    pub coordinate_system_string: Option<String>,
     pub wavelength: Option<Vec<f64>>,
     #[serde(skip_deserializing)]
     pub bytes_per_pixel: usize,

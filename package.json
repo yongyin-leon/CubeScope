@@ -29,9 +29,16 @@
     "test:unit": "vitest run",
     "test:smoke": "playwright test",
     "test": "npm run test:unit && npm run test:smoke",
+    "report:toolchain": "node scripts/report-toolchain.mjs",
     "benchmark": "node scripts/benchmark/run-benchmarks.mjs",
+    "create:sample-catalog": "node scripts/create-remote-sample-catalog.mjs",
+    "qualify:sample": "node scripts/qualify-remote-sample.mjs",
+    "validate:sample-candidate": "node scripts/validate-remote-sample-candidate.mjs",
+    "validate:samples": "playwright test tests/smoke/sample-catalog.spec.js",
     "verify:pack": "node scripts/verify-pack-consumer.mjs",
-    "verify:alpha": "npm run fixtures:generate && npm run build && npm run test && npm run benchmark && npm run verify:pack"
+    "verify:node22-local": "node scripts/verify-node22-local.mjs",
+    "report:alpha": "node scripts/report-local-alpha.mjs",
+    "verify:alpha": "npm run fixtures:generate && npm run build && npm run test && npm run report:toolchain && npm run benchmark && npm run validate:samples && npm run verify:pack && npm run report:alpha"
   },
   "keywords": [
     "cubescope",

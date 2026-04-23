@@ -9,17 +9,35 @@
  */
 
 import { createEnviFormatAdapter } from '../formats/envi-format-adapter.js';
-import { ProgressType, WorkerCommand, WorkerResponse, createWorkerRequest } from '../protocol/worker-protocol.js';
+import { ProgressType } from '../protocol/worker-protocol.js';
+import { AutoRenderer } from '../rendering/auto-renderer.js';
 import { createRendererInput } from '../rendering/renderer-contract.js';
-import { WebGpuRenderer } from '../rendering/webgpu-renderer.js';
-import { isStaleSourceMessage, RequestTracker } from './request-tracker.js';
+import {
+    pixelToWorld as mapPixelToWorld,
+    worldToPixel as mapWorldToPixel,
+} from '../spatial/coordinate-mapper.js';
+import { RequestTracker } from './request-tracker.js';
+import { RenderSession } from './render-session.js';
+import {
+    buildSpectrumWorkerRequest,
+    buildStatsWorkerRequest,
+    buildTileWorkerRequest,
+    buildWorkerCancelRequest,
+} from './worker-dispatch-policy.js';
+import {
+    classifyWorkerRuntimeMessage,
+    normalizeWorkerRuntimeMessage,
+} from './worker-message-router.js';
+import { WorkScheduler } from './work-scheduler.js';
+import { ViewerWorkerPool } from './worker-pool.js';
 import {
     DEFAULT_METADATA_CACHE_POLICY,
     DEFAULT_STATS_CACHE_POLICY,
     SourceMapCache,
     SourceValueCache,
 } from './source-cache.js';
-import { createLocalEnviLoadSource } from '../sources/load-source.js';
+import { createEnviLoadSource } from '../sources/load-source.js';
+import { serializeDataSource } from '../sources/data-source.js';
 import { CubeStore } from '../store/cube-store.js';
 
 // A simple, self-contained event emitter class to handle decoupling.
@@ -37,7 +55,7 @@ export class ViewerRuntime extends EventEmitter {
     #wasmModule = null; 
     #header = null;
     #hdrBytes = null;
-    #imgFile = null;
+    #dataSourceDescriptor = null;
     #cubeStore = null;
     #formatAdapter = null;
     #performance = { 
@@ -50,9 +68,7 @@ export class ViewerRuntime extends EventEmitter {
 
     // Rendering & Tile state
     #renderer = null;
-    #TILE_SIZE = 512;
-    #activeTileState = new Map();
-    #TILE_RENDERING_KEY = 'rendering';
+    #renderSession = new RenderSession();
     #globalStats = null;
     #currentBands = { r: 30, g: 20, b: 10 };
     #metadataCache = new SourceValueCache(DEFAULT_METADATA_CACHE_POLICY);
@@ -60,31 +76,13 @@ export class ViewerRuntime extends EventEmitter {
     #rendererRecoveryPromise = null;
     #resumeTransitionAfterRendererRecovery = false;
 
-    // Viewport state
-    #scale = 1.0;
-    #offsetX = 0.0;
-    #offsetY = 0.0;
-
     // Worker state
     #MAX_WORKERS;
-    #workers = [];
-    #idleWorkers = [];
-    #tileRequestQueue = new Map();
-    #backgroundStatsQueue = [];
-    #totalBandsForStats = 0;
-    #isWaitingForStats = false; 
+    #workerPool = new ViewerWorkerPool();
+    #workScheduler = new WorkScheduler();
     #pendingSpectrumResolvers = new Map();
     #requestTracker = new RequestTracker();
     #activeSourceId = 0;
-
-    // Transition animation state
-    #isTransitioning = false;
-    #transitionTileState = null;
-    #transitionTileCounter = 0;
-
-    // Preloading state
-    #preloadQueue = [];
-    #isPreloading = false;
     
     // Core components & configuration
     #canvas;
@@ -112,8 +110,9 @@ export class ViewerRuntime extends EventEmitter {
             getWasmModule: async () => this.#wasmModule
                 ?? await import(/* @vite-ignore */ this.#wasmPaths.wasmJsPath),
         });
-        this.#renderer = new WebGpuRenderer(this.#canvas, {
+        this.#renderer = new AutoRenderer(this.#canvas, {
             onLifecycleEvent: (event) => this.#handleRendererLifecycleEvent(event),
+            preference: options.rendererPreference ?? 'auto',
         });
         function getAdaptiveMaxWorkers(options = {}) {
             const defaultConcurrency = 4; 
@@ -135,8 +134,8 @@ export class ViewerRuntime extends EventEmitter {
         return this.#cubeStore?.getHeader() ?? this.#header;
     }
 
-    getImageFile() {
-        return this.#cubeStore?.getImageFile() ?? this.#imgFile;
+    getDataSourceDescriptor() {
+        return this.#cubeStore?.getDataSourceDescriptor() ?? this.#dataSourceDescriptor;
     }
 
     getHdrBytes() {
@@ -157,11 +156,19 @@ export class ViewerRuntime extends EventEmitter {
 
     async getSpectralProfile(x, y) {
         const header = this.getHeader();
-        const imgFile = this.getImageFile();
+        const dataSource = this.getDataSourceDescriptor();
         const hdrBytes = this.getHdrBytes();
-        if (!header || !imgFile || !hdrBytes) return null;
+        if (!header || !dataSource || !hdrBytes) return null;
         const sourceId = this.#cubeStore?.getSourceId() ?? this.#activeSourceId;
-        const requestId = `spec_${Date.now()}_${Math.random()}`;
+        const spectrumRequest = buildSpectrumWorkerRequest({
+            sourceId,
+            hdrBytes,
+            dataSource,
+            x,
+            y,
+            header,
+        });
+        const requestId = spectrumRequest.requestId;
         return new Promise((resolve, reject) => {
             this.#pendingSpectrumResolvers.set(requestId, { resolve, reject, sourceId });
             this.#requestTracker.track(sourceId, requestId);
@@ -169,25 +176,25 @@ export class ViewerRuntime extends EventEmitter {
                 if (!this.#pendingSpectrumResolvers.has(requestId) || !this.#requestTracker.has(sourceId, requestId)) {
                     return;
                 }
-                if (this.#idleWorkers.length > 0) {
-                    const worker = this.#idleWorkers.pop();
-                    worker.postMessage(createWorkerRequest(WorkerCommand.GET_SPECTRUM, {
-                        sourceId,
-                        requestId,
-                        payload: {
-                            hdrBytes,
-                            imgFile,
-                            x,
-                            y,
-                            header,
-                        },
-                    }));
+                if (this.#workScheduler.hasIdleWorker()) {
+                    const worker = this.#workScheduler.takeIdleWorker();
+                    worker.postMessage(spectrumRequest.envelope);
                 } else {
                     setTimeout(dispatch, 200);
                 }
             };
             dispatch();
         });
+    }
+
+    pixelToWorld(x, y) {
+        return this.#cubeStore?.pixelToWorld(x, y)
+            ?? mapPixelToWorld(this.getHeader(), x, y);
+    }
+
+    worldToPixel(x, y) {
+        return this.#cubeStore?.worldToPixel(x, y)
+            ?? mapWorldToPixel(this.getHeader(), x, y);
     }
     // --- Public API ---
 
@@ -203,7 +210,7 @@ export class ViewerRuntime extends EventEmitter {
             this.emit('log', 'Main thread WASM initialization completed.');
             this.#resizeCanvas();
             await this.#renderer.init();
-            this.emit('log', 'WebGPU renderer initialization completed.');
+            this.emit('log', `Renderer initialization completed (${this.#renderer.getKind?.() ?? 'unknown'}).`);
             await this.#initWorkers();
             this.#attachEventListeners();
             this.emit('ready');
@@ -229,13 +236,13 @@ export class ViewerRuntime extends EventEmitter {
     async load(source, legacyDataFile) {
         let loadSource;
         try {
-            loadSource = createLocalEnviLoadSource(source, legacyDataFile);
+            loadSource = createEnviLoadSource(source, legacyDataFile);
         } catch (error) {
             this.emit('error', error.message);
             return;
         }
 
-        const { headerFile, dataFile, headerSource, dataSource } = loadSource;
+        const { headerSource, dataSource } = loadSource;
         const sourceIdToCancel = this.#cubeStore?.getSourceId() ?? this.#activeSourceId;
         this.#activeSourceId += 1;
         this.#resetSourceState({
@@ -243,7 +250,7 @@ export class ViewerRuntime extends EventEmitter {
             cancelReason: 'source-switch',
         });
         this.emit('loadstart');
-        this.emit('log', `开始加载: ${headerFile.name}, ${dataFile.name}`);
+        this.emit('log', `开始加载: ${headerSource.name}, ${dataSource.name}`);
         
         this.#performance.loadStartTime = performance.now();
         this.#performance.isInitialLoading = true;
@@ -258,21 +265,22 @@ export class ViewerRuntime extends EventEmitter {
             this.emit('headerloaded', this.#header);
             this.emit('log', `HDR 解析成功。 格式(Interleave): ${this.#header.interleave}`);
 
-            const metadataSummary = this.#createMetadataSummary({
-                dataFile,
+            const metadataSummary = await this.#createMetadataSummary({
+                dataSource,
                 header: this.#header,
             });
             this.#metadataCache.set(this.#activeSourceId, metadataSummary);
             this.emit('metadata', metadataSummary);
 
             this.#resizeCanvas();
-            this.#imgFile = dataFile;
+            this.#dataSourceDescriptor = serializeDataSource(dataSource);
             this.#cubeStore = new CubeStore({
                 sourceId: this.#activeSourceId,
                 header: this.#header,
                 headerBytes: this.#hdrBytes,
                 headerSource,
                 dataSource,
+                dataSourceDescriptor: this.#dataSourceDescriptor,
             });
             this.emit('log', "正在为初始视图计算统计值...");
             this.emit('statechange', { loading: true, message: '计算统计值...' });
@@ -285,10 +293,17 @@ export class ViewerRuntime extends EventEmitter {
         }
     }
 
-    #createMetadataSummary({ dataFile, header }) {
+    async #createMetadataSummary({ dataSource, header }) {
+        let fileSize = null;
+
+        try {
+            fileSize = await dataSource.size();
+        } catch {}
+
         return {
-                fileName: dataFile.name,
-                fileSize: dataFile.size, // 文件大小 (bytes)
+                fileName: dataSource.name,
+                fileSize,
+                sourceKind: dataSource.kind,
                 dimensions: {
                     samples: header.samples,
                     lines: header.lines,
@@ -315,7 +330,7 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     setBands({ r, g, b }) {
-        if (this.#isTransitioning || !this.#header) return;
+        if (this.#renderSession.isTransitioning() || !this.#header) return;
         const newR = parseInt(r, 10), newG = parseInt(g, 10), newB = parseInt(b, 10);
         if (newR === this.#currentBands.r && newG === this.#currentBands.g && newB === this.#currentBands.b) return;
         this.#currentBands = { r: newR, g: newG, b: newB };
@@ -333,7 +348,7 @@ export class ViewerRuntime extends EventEmitter {
         } else {
             this.emit('log', `缓存缺失，正在为波段 ${missingBands.join(',')} 计算统计值...`);
             this.emit('statechange', { loading: true, message: '计算统计值...' });
-            this.#isWaitingForStats = true;
+            this.#workScheduler.startWaitingForStats();
             this.#dispatchStatsCalculation(missingBands, false);
         }
     }
@@ -347,9 +362,8 @@ export class ViewerRuntime extends EventEmitter {
             cancelReason: 'viewer-destroy',
         });
         this.#detachEventListeners();
-        this.#workers.forEach(worker => worker.terminate());
-        this.#workers = [];
-        this.#idleWorkers = [];
+        this.#workerPool.terminateAll();
+        this.#workScheduler.resetWorkers();
         this.#renderer?.destroy();
         this.#renderer = null;
         this.emit('destroyed');
@@ -379,32 +393,17 @@ export class ViewerRuntime extends EventEmitter {
         const rect = this.#canvas.getBoundingClientRect();
         const canvasX = e.clientX - rect.left;
         const canvasY = e.clientY - rect.top;
+        const pixel = this.#renderSession.canvasPointToPixel({
+            canvasX,
+            canvasY,
+            canvasWidth: this.#canvas.clientWidth,
+            canvasHeight: this.#canvas.clientHeight,
+            header: this.#header,
+        });
 
-        // 2. 将 canvas 坐标转换为标准化设备坐标 (NDC)，范围从 -1 到 +1
-        const mouseX = (canvasX / this.#canvas.clientWidth) * 2 - 1;
-        const mouseY = (canvasY / this.#canvas.clientHeight) * -2 + 1; // WebGPU/OpenGL的Y轴是向上的，所以要翻转
-
-        // 3. 反向应用平移和缩放变换，得到视口坐标
-        // 这是渲染变换的逆过程
-        const { x: aspectX, y: aspectY } = this.#getAspectRatioCorrection();
-        
-        const viewX = (mouseX - this.#offsetX) / this.#scale;
-        const viewY = (mouseY - this.#offsetY) / this.#scale;
-
-        // 4. 将视口坐标转换回图像的 UV 坐标 (范围从 0 到 1)
-        const imageU = (viewX / aspectX + 1) / 2;
-        const imageV = (viewY / -aspectY + 1) / 2; // 再次处理Y轴翻转
-
-        // 5. 最后，将 UV 坐标乘以图像的宽高，得到最终的整数像素坐标
-        const imageX = Math.floor(imageU * this.#header.samples);
-        const imageY = Math.floor(imageV * this.#header.lines);
-
-        // 6. 边界检查，确保计算出的坐标在图像范围内
-        if (imageX >= 0 && imageX < this.#header.samples && imageY >= 0 && imageY < this.#header.lines) {
-            this.emit('log', `图像被点击，像素坐标: (${imageX}, ${imageY})`);
-            
-            // 7. 触发自定义的 'image-clicked' 事件，并把精确的图像坐标作为数据传递出去
-            this.emit('image-clicked', { x: imageX, y: imageY });
+        if (pixel) {
+            this.emit('log', `图像被点击，像素坐标: (${pixel.x}, ${pixel.y})`);
+            this.emit('image-clicked', pixel);
         }
     }
     // --- Private Methods ---
@@ -457,16 +456,14 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     #handleMouseMove = (e) => {
-        if (!this.#isDragging || !this.#header || this.#scale <= 1.0) return;
+        if (!this.#isDragging || !this.#header || this.#renderSession.getScale() <= 1.0) return;
         const dx = (e.clientX - this.#lastMousePos.x) * 2 / this.#canvas.clientWidth;
         const dy = (e.clientY - this.#lastMousePos.y) * 2 / this.#canvas.clientHeight;
-        this.#offsetX += dx;
-        this.#offsetY -= dy;
-        const { x: aspectX, y: aspectY } = this.#getAspectRatioCorrection();
-        const limitX = (this.#scale - 1) * aspectX;
-        const limitY = (this.#scale - 1) * aspectY;
-        this.#offsetX = Math.max(-limitX, Math.min(limitX, this.#offsetX));
-        this.#offsetY = Math.max(-limitY, Math.min(limitY, this.#offsetY));
+        this.#renderSession.panBy({
+            dx,
+            dy,
+            aspect: this.#getAspectRatioCorrection(),
+        });
         this.#lastMousePos = { x: e.clientX, y: e.clientY };
         requestAnimationFrame(() => this.#updateAndDraw());
     }
@@ -478,61 +475,34 @@ export class ViewerRuntime extends EventEmitter {
         const mouseX = (e.clientX - rect.left) / rect.width * 2 - 1;
         const mouseY = (e.clientY - rect.top) / rect.height * -2 + 1;
         const zoomFactor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
-        const newScale = this.#scale * zoomFactor;
-        if (this.#scale > 1.0 && newScale <= 1.0) {
-            this.#scale = 1.0;
-            this.#offsetX = 0;
-            this.#offsetY = 0;
-        } else {
-            this.#scale = Math.max(1.0, newScale);
-            if (this.#scale > 1.0) {
-                this.#offsetX = (this.#offsetX - mouseX) * zoomFactor + mouseX;
-                this.#offsetY = (this.#offsetY - mouseY) * zoomFactor + mouseY;
-            }
-        }
+        this.#renderSession.zoomAround({
+            zoomFactor,
+            anchorX: mouseX,
+            anchorY: mouseY,
+        });
         requestAnimationFrame(() => this.#updateAndDraw());
     }
     
     async #initWorkers() {
-        const workerUrl = this.#wasmPaths.workerPath;
-        const cacheBustingUrl = `${workerUrl}?t=${new Date().getTime()}`;
-        console.log(`Loading Worker from URL (cache-busting): ${cacheBustingUrl}`);
-        const initPromises = [];
-        for (let i = 0; i < this.#MAX_WORKERS; i++) {
-            const worker = new Worker(cacheBustingUrl, { type: 'module' });
-            this.#workers.push(worker);
-            const promise = new Promise((resolve, reject) => {
-                worker.onmessage = (e) => {
-                    if (e.data.type === WorkerResponse.INIT_COMPLETE) {
-                        this.#idleWorkers.push(worker);
-                        resolve();
-                    }
-                    else if (e.data.type === WorkerResponse.ERROR) {
-                        const message = e.data.error?.message
-                            ?? e.data.payload?.message
-                            ?? e.data.message
-                            ?? 'Unknown worker initialization error.';
-                        this.emit('log', `Worker 初始化错误: ${message}`);
-                        reject(new Error(message));
-                    }
-                    else { this.#handleWorkerMessage(e); }
-                };
-                worker.onerror = (err) => { this.emit('log', `A worker encountered a fatal error: ${err.message}`); reject(err); };
-            });
+        try {
             const absoluteWasmJsPath = new URL(this.#wasmPaths.wasmJsPath, import.meta.url).href;
             const absoluteWasmWasmPath = new URL(this.#wasmPaths.wasmWasmPath, import.meta.url).href;
-            worker.postMessage(createWorkerRequest(WorkerCommand.INIT, {
-                sourceId: 0,
-                payload: {
-                    wasmJsPath: absoluteWasmJsPath,
-                    wasmWasmPath: absoluteWasmWasmPath,
+            await this.#workerPool.init({
+                count: this.#MAX_WORKERS,
+                workerUrl: this.#wasmPaths.workerPath,
+                wasmJsPath: absoluteWasmJsPath,
+                wasmWasmPath: absoluteWasmWasmPath,
+                onWorkerReady: (worker) => {
+                    this.#workScheduler.registerIdleWorker(worker);
                 },
-            }));
-            initPromises.push(promise);
-        }
-        try {
-            await Promise.all(initPromises);
-            this.emit('log', `${this.#idleWorkers.length} workers initialized and ready.`);
+                onRuntimeMessage: (event) => {
+                    this.#handleWorkerMessage(event);
+                },
+                onWorkerFatalError: (error) => {
+                    this.emit('log', `A worker encountered a fatal error: ${error.message}`);
+                },
+            });
+            this.emit('log', `${this.#workScheduler.getIdleWorkerCount()} workers initialized and ready.`);
         } catch (error) {
             this.emit('error', "Worker pool initialization failed.");
             console.error("Worker pool init failed:", error);
@@ -541,42 +511,45 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     #handleWorkerMessage(e) {
-        const {
-            type,
-            sourceId = 0,
-            requestId,
-            payload = {},
-            error,
-        } = e.data;
-        const worker = e.target;
-        if (requestId) {
-            this.#requestTracker.release(sourceId, requestId);
+        const message = normalizeWorkerRuntimeMessage(e);
+        if (message.requestId) {
+            this.#requestTracker.release(message.sourceId, message.requestId);
         }
+        const route = classifyWorkerRuntimeMessage(message, {
+            activeSourceId: this.#activeSourceId,
+            currentBands: this.#currentBands,
+        });
+        const { worker, requestId, payload } = message;
 
-        if (isStaleSourceMessage(this.#activeSourceId, sourceId)) {
-            this.#idleWorkers.push(worker);
-            this.#processTileRequestQueue();
-            this.#processBackgroundStatsQueue();
-            this.#processPreloadQueue();
+        switch (route.kind) {
+        case 'stale-source':
+            this.#registerIdleWorkerAndDrain(worker, {
+                tiles: true,
+                stats: true,
+                preload: true,
+            });
             return;
-        }
-
-        if (type === WorkerResponse.CANCELED) {
+        case 'canceled': {
             const resolver = requestId ? this.#pendingSpectrumResolvers.get(requestId) : null;
             if (resolver) {
                 resolver.reject(new Error('Worker request canceled.'));
                 this.#pendingSpectrumResolvers.delete(requestId);
             }
-            this.#idleWorkers.push(worker);
-            this.#processTileRequestQueue();
-            this.#processBackgroundStatsQueue();
-            this.#processPreloadQueue();
+            this.#registerIdleWorkerAndDrain(worker, {
+                tiles: true,
+                stats: true,
+                preload: true,
+            });
+            return;
         }
-        else if (type === WorkerResponse.STATS_COMPLETE) {
-            const { stats, bands, isInitial } = payload;
-            for (const band of bands) { if (stats[band]) { this.#setBandStats(band, stats[band]); } }
-            this.#idleWorkers.push(worker);
-            if (isInitial) {
+        case 'stats-complete':
+            for (const band of route.bands) {
+                if (route.stats[band]) {
+                    this.#setBandStats(band, route.stats[band]);
+                }
+            }
+            this.#registerIdleWorkerAndDrain(worker, { stats: false });
+            if (route.isInitial) {
                 this.#globalStats = {};
                 [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b].forEach(b => {
                     if (this.#hasBandStats(b)) { this.#globalStats[b] = this.#getBandStats(b); }
@@ -590,12 +563,12 @@ export class ViewerRuntime extends EventEmitter {
                 setupAndDraw();
                 this.#startBackgroundStatCalculation();
             } else {
-                if (!this.#isTransitioning && this.#isWaitingForStats) {
+                if (!this.#renderSession.isTransitioning() && this.#workScheduler.isWaitingForStats()) {
                     const neededBands = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
                     const isNowReady = neededBands.every(b => this.#hasBandStats(b));
                     if (isNowReady) {
                         this.emit('log', "Requested band statistics computed; starting smooth transition...");
-                        this.#isWaitingForStats = false; 
+                        this.#workScheduler.stopWaitingForStats();
                         this.#globalStats = {};
                         neededBands.forEach(b => this.#globalStats[b] = this.#getBandStats(b));
                         this.#startTransition();
@@ -603,20 +576,24 @@ export class ViewerRuntime extends EventEmitter {
                 }
             }
             this.#processBackgroundStatsQueue();
-        } 
-        else if (type === WorkerResponse.TILE_COMPLETE) {
-            if (!payload || !payload.bands) {
-                this.emit('log', `[ERROR] Received malformed tile payload; discarded. Payload: ${JSON.stringify(payload)}`);
-                this.#idleWorkers.push(worker); this.#processTileRequestQueue(); this.#processPreloadQueue(); return; 
-            }
-            const tileBands = payload.bands;
-            if (parseInt(tileBands[0], 10) !== this.#currentBands.r || parseInt(tileBands[1], 10) !== this.#currentBands.g || parseInt(tileBands[2], 10) !== this.#currentBands.b) {
-                this.emit('log', `Discarded stale tile (requested bands: ${tileBands.join(',')}, current bands: ${this.#currentBands.r},${this.#currentBands.g},${this.#currentBands.b})`);
-                this.#idleWorkers.push(worker); this.#processTileRequestQueue(); this.#processPreloadQueue(); return;
-            }
-            const tileKey = `${payload.tile.x},${payload.tile.y}`;
-            const slot = this.#isTransitioning ? 'transition' : 'active';
-            const tileState = this.#isTransitioning ? this.#transitionTileState : this.#activeTileState;
+            return;
+        case 'tile-complete-malformed':
+            this.emit('log', `[ERROR] Received malformed tile payload; discarded. Payload: ${route.detail}`);
+            this.#registerIdleWorkerAndDrain(worker, {
+                tiles: true,
+                preload: true,
+            });
+            return;
+        case 'tile-complete-stale-bands':
+            this.emit('log', `Discarded stale tile (requested bands: ${route.requestedBandsText}, current bands: ${this.#currentBands.r},${this.#currentBands.g},${this.#currentBands.b})`);
+            this.#registerIdleWorkerAndDrain(worker, {
+                tiles: true,
+                preload: true,
+            });
+            return;
+        case 'tile-complete': {
+            const tileKey = route.tileKey;
+            const slot = this.#renderSession.getCurrentRenderSlot();
             const stored = this.#renderer.storeTile({
                 sourceId: this.#activeSourceId,
                 slot,
@@ -624,16 +601,16 @@ export class ViewerRuntime extends EventEmitter {
                 tilePayload: payload,
             });
             if (!stored) {
-                tileState?.delete(tileKey);
-                this.#idleWorkers.push(worker);
-                this.#processTileRequestQueue();
-                this.#processPreloadQueue();
+                this.#renderSession.removeCurrentTile(tileKey);
+                this.#registerIdleWorkerAndDrain(worker, {
+                    tiles: true,
+                    preload: true,
+                });
                 return;
             }
-            tileState?.set(tileKey, true);
-            if (this.#isTransitioning) {
-                this.#transitionTileCounter--;
-                if (this.#transitionTileCounter === 0) {
+            this.#renderSession.markCurrentTileLoaded(tileKey);
+            if (this.#renderSession.isTransitioning()) {
+                if (this.#renderSession.consumeTransitionTile() === 0) {
                     //
                     // 结束计时
                     const bandSwitchTime = performance.now() - this.#performance.bandSwitchStartTime;
@@ -645,20 +622,7 @@ export class ViewerRuntime extends EventEmitter {
                         value: bandSwitchTime,
                         unit: 'ms'
                     });
-                    this.#canvas.style.opacity = '0';
-                    setTimeout(() => {
-                        this.#renderer.swapSlot({
-                            sourceId: this.#activeSourceId,
-                            from: 'transition',
-                            to: 'active',
-                        });
-                        this.#activeTileState = this.#transitionTileState ?? new Map();
-                        this.#transitionTileState = null;
-                        this.#isTransitioning = false;
-                        requestAnimationFrame(() => this.#updateAndDraw());
-                        this.emit('statechange', { loading: false });
-                        setTimeout(() => this.#canvas.style.opacity = '1', 20);
-                    }, 200);
+                    this.#finalizeTransitionFrame();
                 }
             } else {
                 if (this.#performance.isInitialLoading) {
@@ -669,80 +633,85 @@ export class ViewerRuntime extends EventEmitter {
                 }
                 requestAnimationFrame(() => this.#updateAndDraw());
             }
-            this.#idleWorkers.push(worker);
-            this.#processTileRequestQueue();
-            this.#processPreloadQueue();
-        } 
-        else if (type === WorkerResponse.SPECTRUM_COMPLETE) {
-            const { spectrum } = payload;
+            this.#registerIdleWorkerAndDrain(worker, {
+                tiles: true,
+                preload: true,
+            });
+            return;
+        }
+        case 'spectrum-complete': {
             const resolver = this.#pendingSpectrumResolvers.get(requestId);
             if (resolver) {
-                resolver.resolve(new Float32Array(spectrum));
+                resolver.resolve(new Float32Array(route.spectrum ?? []));
                 this.#pendingSpectrumResolvers.delete(requestId);
             }
-            this.#idleWorkers.push(worker);
+            this.#registerIdleWorkerAndDrain(worker);
+            return;
         }
-        else if (type === WorkerResponse.SPECTRUM_ERROR) {
-            const message = error?.message ?? payload?.message;
+        case 'spectrum-error': {
             const resolver = this.#pendingSpectrumResolvers.get(requestId);
             if (resolver) {
-                resolver.reject(new Error(message || 'Spectrum error'));
+                resolver.reject(new Error(route.message || 'Spectrum error'));
                 this.#pendingSpectrumResolvers.delete(requestId);
             }
-            this.#idleWorkers.push(worker);
+            this.#registerIdleWorkerAndDrain(worker);
+            return;
         }
-        else if (type === WorkerResponse.TILE_ERROR) {
-            if (this.#isTransitioning) {
-                 this.#transitionTileCounter--;
-                 if (this.#transitionTileCounter === 0) {
-                    this.#canvas.style.opacity = '0';
-                    setTimeout(() => {
-                        this.#renderer.swapSlot({
-                            sourceId: this.#activeSourceId,
-                            from: 'transition',
-                            to: 'active',
-                        });
-                        this.#activeTileState = this.#transitionTileState ?? new Map();
-                        this.#transitionTileState = null;
-                        this.#isTransitioning = false;
-                        requestAnimationFrame(() => this.#updateAndDraw());
-                        this.emit('statechange', { loading: false });
-                        setTimeout(() => this.#canvas.style.opacity = '1', 20);
-                    }, 200);
+        case 'tile-error': {
+            if (this.#renderSession.isTransitioning()) {
+                 if (this.#renderSession.consumeTransitionTile() === 0) {
+                    this.#finalizeTransitionFrame();
                  }
             }
-            const { tile, message } = payload;
-            const tileKey = `${tile.x},${tile.y}`;
-            this.emit('log', `Worker failed to load tile (${tileKey}) : ${message || 'Unknown error'}`);
-            const slot = this.#isTransitioning ? 'transition' : 'active';
-            const tileState = this.#isTransitioning ? this.#transitionTileState : this.#activeTileState;
-            tileState?.delete(tileKey);
+            const tileKey = route.tileKey ?? 'unknown';
+            this.emit('log', `Worker failed to load tile (${tileKey}) : ${route.message || 'Unknown error'}`);
+            const slot = this.#renderSession.getCurrentRenderSlot();
+            this.#renderSession.removeCurrentTile(tileKey);
             this.#renderer.dropTile({
                 sourceId: this.#activeSourceId,
                 slot,
                 tileKey,
             });
-            this.#idleWorkers.push(worker);
-            this.#processTileRequestQueue();
-            this.#processPreloadQueue();
+            this.#registerIdleWorkerAndDrain(worker, {
+                tiles: true,
+                preload: true,
+            });
+            return;
         }
-        else if (type === WorkerResponse.ERROR) {
-            const message = error?.message ?? payload?.message ?? e.data.message ?? 'Unknown worker error';
-            this.emit('error', message);
-            this.#idleWorkers.push(worker);
+        case 'error':
+        case 'unknown':
+            this.emit('error', route.message);
+            this.#registerIdleWorkerAndDrain(worker);
+            return;
         }
     }
 
-    #postTrackedWorkerRequest(worker, type, { sourceId, requestId, payload }) {
-        if (requestId) {
-            this.#requestTracker.track(sourceId, requestId);
+    #registerIdleWorkerAndDrain(worker, {
+        tiles = false,
+        stats = false,
+        preload = false,
+    } = {}) {
+        if (worker) {
+            this.#workScheduler.registerIdleWorker(worker);
         }
 
-        worker.postMessage(createWorkerRequest(type, {
-            sourceId,
-            requestId,
-            payload,
-        }));
+        if (tiles) {
+            this.#processTileRequestQueue();
+        }
+        if (stats) {
+            this.#processBackgroundStatsQueue();
+        }
+        if (preload) {
+            this.#processPreloadQueue();
+        }
+    }
+
+    #postTrackedWorkerRequest(worker, request) {
+        if (request.requestId) {
+            this.#requestTracker.track(request.sourceId, request.requestId);
+        }
+
+        worker.postMessage(request.envelope);
     }
 
     #broadcastCancelRequest(sourceId, requestId, reason) {
@@ -750,15 +719,12 @@ export class ViewerRuntime extends EventEmitter {
             return;
         }
 
-        const cancelMessage = createWorkerRequest(WorkerCommand.CANCEL, {
+        const cancelMessage = buildWorkerCancelRequest({
             sourceId,
             requestId,
-            payload: { reason },
+            reason,
         });
-
-        for (const worker of this.#workers) {
-            worker.postMessage(cancelMessage);
-        }
+        this.#workerPool.broadcast(cancelMessage);
     }
 
     #cancelSourceRequests(sourceId, reason) {
@@ -780,23 +746,20 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     #dispatchStatsCalculation(bands, isInitial = false) {
-        if (this.#idleWorkers.length > 0) {
-            const worker = this.#idleWorkers.pop();
-            this.#postTrackedWorkerRequest(worker, WorkerCommand.CALCULATE_STATS, {
+        if (this.#workScheduler.hasIdleWorker()) {
+            const worker = this.#workScheduler.takeIdleWorker();
+            this.#postTrackedWorkerRequest(worker, buildStatsWorkerRequest({
                 sourceId: this.#activeSourceId,
-                requestId: this.#createStatsRequestId(bands, isInitial),
-                payload: {
-                    hdrBytes: this.#hdrBytes,
-                    imgFile: this.#imgFile,
-                    bands,
-                    header: this.#header,
-                    isInitial,
-                },
-            });
+                hdrBytes: this.#hdrBytes,
+                dataSource: this.#dataSourceDescriptor,
+                bands,
+                header: this.#header,
+                isInitial,
+            }));
         } else {
             if (!isInitial) {
                 this.emit('log', "No idle worker; task queued for background.");
-                bands.forEach(b => { if (!this.#backgroundStatsQueue.includes(b)) this.#backgroundStatsQueue.unshift(b); });
+                this.#workScheduler.prependBackgroundStatsBands(bands);
             } else {
                 this.emit('error', "No available worker for initial stats task!");
             }
@@ -804,118 +767,108 @@ export class ViewerRuntime extends EventEmitter {
     }
     
     #startTransition() {
-        if (this.#isTransitioning) return;
-        this.emit('statechange', { loading: true, message: 'Switching bands...' });
-        this.#isTransitioning = true;
-        this.#transitionTileState = new Map();
-        this.#renderer.clearSlot({
+        if (!this.#renderSession.beginTransition({
+            renderer: this.#renderer,
             sourceId: this.#activeSourceId,
-            slot: 'transition',
-        });
+        })) return;
+        this.emit('statechange', { loading: true, message: 'Switching bands...' });
         const visibleTiles = this.#calculateVisibleTiles();
-        this.#transitionTileCounter = visibleTiles.length;
-        if (this.#transitionTileCounter === 0) {
-            this.#isTransitioning = false;
+        this.#renderSession.setTransitionTileCount(visibleTiles.length);
+        if (visibleTiles.length === 0) {
+            this.#renderSession.cancelTransition();
             requestAnimationFrame(() => this.#updateAndDraw());
             this.emit('statechange', { loading: false });
             return;
         }
         for (const tile of visibleTiles) {
-            const worker = this.#idleWorkers.pop();
+            const worker = this.#workScheduler.takeIdleWorker();
             if (worker) {
-                 const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
+                const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
                 console.log(`[主线程-1-发送任务] (过渡) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-                this.#postTrackedWorkerRequest(worker, WorkerCommand.LOAD_TILE, {
+                this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
                     sourceId: this.#activeSourceId,
-                    requestId: this.#createTileRequestId(tile, bandsPayload, 'transition'),
-                    payload: {
-                        hdrBytes: this.#hdrBytes,
-                        imgFile: this.#imgFile,
-                        tile,
-                        bands: bandsPayload,
-                        globalStats: this.#globalStats,
-                        header: this.#header,
-                    },
-                });
-            } else {
-                this.#transitionTileCounter--; 
-                this.#tileRequestQueue.set(`${tile.x},${tile.y}`, { tile });
-            }
-        }
-        this.#isPreloading = false;
-        this.#preloadQueue = [];
-    }
-
-    #startBackgroundStatCalculation() {
-        if (!this.#config?.backgroundStats) { 
-            this.emit('log', '后台统计功能已关闭。');
-            return; 
-        }
-        this.#backgroundStatsQueue = [];
-        for (let i = 1; i <= this.#header.bands; i++) {
-            if (!this.#hasBandStats(i)) {
-                this.#backgroundStatsQueue.push(i);
-            }
-        }
-        this.#totalBandsForStats = this.#backgroundStatsQueue.length;
-        if (this.#totalBandsForStats === 0) {
-            this.emit('log', `所有波段统计值已在缓存中，无需后台计算。`);
-            return;
-        }
-        this.emit('log', `开始后台统计... 队列中有 ${this.#backgroundStatsQueue.length} 个波段待处理。`);
-        this.#processBackgroundStatsQueue();
-    }
-
-    #processBackgroundStatsQueue() {
-        if (this.#isTransitioning) return;
-        if (this.#idleWorkers.length > 0 && this.#backgroundStatsQueue.length > 0) {
-            const total = this.#totalBandsForStats;
-            const remaining = this.#backgroundStatsQueue.length - 1;
-            const processed = total - remaining;
-            const progressPercent = total > 0 ? (processed / total) * 100 : 0;
-            this.emit('progress', {
-                type: ProgressType.STATS_CALCULATION,
-                processed,
-                total,
-                progress: progressPercent
-            });
-            const worker = this.#idleWorkers.pop();
-            const bandToProcess = this.#backgroundStatsQueue.shift();
-            this.#postTrackedWorkerRequest(worker, WorkerCommand.CALCULATE_STATS, {
-                sourceId: this.#activeSourceId,
-                requestId: this.#createStatsRequestId([bandToProcess], false),
-                payload: {
                     hdrBytes: this.#hdrBytes,
-                    imgFile: this.#imgFile,
-                    bands: [bandToProcess],
-                    header: this.#header,
-                    isInitial: false,
-                },
-            });
-        }
-    }
-    
-    #processTileRequestQueue() {
-        if (this.#isTransitioning) return;
-        while (this.#idleWorkers.length > 0 && this.#tileRequestQueue.size > 0) {
-            const tileKey = this.#tileRequestQueue.keys().next().value;
-            const { tile } = this.#tileRequestQueue.get(tileKey);
-            this.#tileRequestQueue.delete(tileKey);
-            const worker = this.#idleWorkers.pop();
-            const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-            console.log(`[主线程-1-发送任务] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-            this.#postTrackedWorkerRequest(worker, WorkerCommand.LOAD_TILE, {
-                sourceId: this.#activeSourceId,
-                requestId: this.#createTileRequestId(tile, bandsPayload, 'visible'),
-                payload: {
-                    hdrBytes: this.#hdrBytes,
-                    imgFile: this.#imgFile,
+                    dataSource: this.#dataSourceDescriptor,
                     tile,
                     bands: bandsPayload,
                     globalStats: this.#globalStats,
                     header: this.#header,
-                },
+                    phase: 'transition',
+                }));
+            } else {
+                this.#renderSession.consumeTransitionTile();
+                this.#workScheduler.enqueueTileRequest(`${tile.x},${tile.y}`, tile);
+            }
+        }
+        this.#workScheduler.stopPreloading();
+    }
+
+    #startBackgroundStatCalculation() {
+        if (!this.#config?.backgroundStats) {
+            this.emit('log', '后台统计功能已关闭。');
+            return;
+        }
+        const pendingBands = [];
+        for (let i = 1; i <= this.#header.bands; i++) {
+            if (!this.#hasBandStats(i)) {
+                pendingBands.push(i);
+            }
+        }
+        this.#workScheduler.replaceBackgroundStatsQueue(pendingBands);
+        if (!this.#workScheduler.hasBackgroundStatsWork()) {
+            this.emit('log', `所有波段统计值已在缓存中，无需后台计算。`);
+            return;
+        }
+        this.emit('log', `开始后台统计... 队列中有 ${this.#workScheduler.getBackgroundStatsCount()} 个波段待处理。`);
+        this.#processBackgroundStatsQueue();
+    }
+
+    #processBackgroundStatsQueue() {
+        if (this.#renderSession.isTransitioning()) return;
+        if (this.#workScheduler.hasIdleWorker() && this.#workScheduler.hasBackgroundStatsWork()) {
+            const worker = this.#workScheduler.takeIdleWorker();
+            const nextBand = this.#workScheduler.takeNextBackgroundStatsBand();
+            if (!worker || !nextBand) {
+                return;
+            }
+            this.emit('progress', {
+                type: ProgressType.STATS_CALCULATION,
+                processed: nextBand.processed,
+                total: nextBand.total,
+                progress: nextBand.progressPercent
             });
+            this.#postTrackedWorkerRequest(worker, buildStatsWorkerRequest({
+                sourceId: this.#activeSourceId,
+                hdrBytes: this.#hdrBytes,
+                dataSource: this.#dataSourceDescriptor,
+                bands: [nextBand.band],
+                header: this.#header,
+                isInitial: false,
+            }));
+        }
+    }
+    
+    #processTileRequestQueue() {
+        if (this.#renderSession.isTransitioning()) return;
+        while (this.#workScheduler.hasIdleWorker() && this.#workScheduler.hasTileRequests()) {
+            const nextTile = this.#workScheduler.takeNextTileRequest();
+            const worker = this.#workScheduler.takeIdleWorker();
+            if (!nextTile || !worker || !nextTile.tile) {
+                continue;
+            }
+            const { tile } = nextTile;
+            const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
+            console.log(`[主线程-1-发送任务] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
+            this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
+                sourceId: this.#activeSourceId,
+                hdrBytes: this.#hdrBytes,
+                dataSource: this.#dataSourceDescriptor,
+                tile,
+                bands: bandsPayload,
+                globalStats: this.#globalStats,
+                header: this.#header,
+                phase: 'visible',
+            }));
         }
     }
 
@@ -929,13 +882,9 @@ export class ViewerRuntime extends EventEmitter {
             sourceId: this.#activeSourceId,
             slot: 'active',
             header: this.#header,
-            viewState: {
-                scale: this.#scale,
-                offsetX: this.#offsetX,
-                offsetY: this.#offsetY,
-            },
+            viewState: this.#renderSession.getViewState(),
             tiles: visibleTiles,
-            clearMode: this.#isTransitioning ? 'load' : 'clear',
+            clearMode: this.#renderSession.isTransitioning() ? 'load' : 'clear',
         }));
         if (renderResult.rendererReady === false) {
             return;
@@ -943,44 +892,26 @@ export class ViewerRuntime extends EventEmitter {
         let needsLoad = false;
         for (const tile of renderResult.missingTiles) {
             const tileKey = `${tile.x},${tile.y}`;
-            if (this.#activeTileState.get(tileKey) !== this.#TILE_RENDERING_KEY && !this.#isTransitioning) {
-                this.#activeTileState.set(tileKey, this.#TILE_RENDERING_KEY);
-                this.#tileRequestQueue.set(tileKey, { tile });
+            if (this.#renderSession.markActiveTilePending(tileKey)) {
+                this.#workScheduler.enqueueTileRequest(tileKey, tile);
                 needsLoad = true;
             }
         }
         if (needsLoad) { this.#processTileRequestQueue(); }
-        if (!this.#isPreloading && this.#tileRequestQueue.size === 0 && this.#preloadQueue.length > 0) { this.#processPreloadQueue(); }
+        if (!needsLoad && this.#workScheduler.isPreloading() && !this.#workScheduler.hasTileRequests() && this.#workScheduler.hasPreloadEntries()) { this.#processPreloadQueue(); }
     }
     
     #calculateVisibleTiles() {
-        if (!this.#header || !this.#canvas.clientWidth || !this.#canvas.clientHeight) return [];
-        const iW = this.#header.samples; const iH = this.#header.lines;
-        const { x: aX, y: aY } = this.#getAspectRatioCorrection();
-        const vL = (-1 - this.#offsetX) / this.#scale; const vR = (1 - this.#offsetX) / this.#scale; 
-        const vT = (1 - this.#offsetY) / this.#scale; const vB = (-1 - this.#offsetY) / this.#scale;
-        const u_s = (vL / aX + 1) / 2; const u_e = (vR / aX + 1) / 2; 
-        const v_s = (vT / -aY + 1) / 2; const v_e = (vB / -aY + 1) / 2;
-        const mTX = Math.ceil(iW / this.#TILE_SIZE); const mTY = Math.ceil(iH / this.#TILE_SIZE);
-        const sTX = Math.max(0, Math.floor(u_s * iW / this.#TILE_SIZE)); 
-        const eTX = Math.min(mTX, Math.ceil(u_e * iW / this.#TILE_SIZE));
-        const sTY = Math.max(0, Math.floor(v_s * iH / this.#TILE_SIZE));
-        const eTY = Math.min(mTY, Math.ceil(v_e * iH / this.#TILE_SIZE));
-        const tiles = [];
-        for (let y = sTY; y < eTY; y++) { for (let x = sTX; x < eTX; x++) { tiles.push({ x, y }); } }
-        return tiles;
+        return this.#renderSession.calculateVisibleTiles({
+            header: this.#header,
+            canvasWidth: this.#canvas.clientWidth,
+            canvasHeight: this.#canvas.clientHeight,
+        });
     }
     
     #setInitialViewAndDraw() {
-        const MAX_INITIAL_DIM = 2048;
-        const initialViewWidth = Math.min(this.#header.samples, MAX_INITIAL_DIM);
-        const initialViewHeight = Math.min(this.#header.lines, MAX_INITIAL_DIM);
-        const scaleX = this.#header.samples / initialViewWidth;
-        const scaleY = this.#header.lines / initialViewHeight;
-        this.#scale = Math.max(scaleX, scaleY);
-        this.#offsetX = 0;
-        this.#offsetY = 0;
-        this.emit('log', `Setting initial focused view: scale ${this.#scale.toFixed(2)}x`);
+        const scale = this.#renderSession.setInitialView(this.#header);
+        this.emit('log', `Setting initial focused view: scale ${scale.toFixed(2)}x`);
         requestAnimationFrame(() => this.#updateAndDraw());
         setTimeout(() => this.#startPreloading(), 500);
     }
@@ -990,11 +921,11 @@ export class ViewerRuntime extends EventEmitter {
             this.emit('log', 'Tile preloading is disabled.');
             return;
         }
-        if (this.#isPreloading || !this.#header || !this.#globalStats) return;
-        this.#isPreloading = true;
-        this.#preloadQueue = [];
-        const maxTileX = Math.ceil(this.#header.samples / this.#TILE_SIZE);
-        const maxTileY = Math.ceil(this.#header.lines / this.#TILE_SIZE);
+        if (this.#workScheduler.isPreloading() || !this.#header || !this.#globalStats) return;
+        const preloadEntries = [];
+        const tileSize = this.#renderSession.getTileSize();
+        const maxTileX = Math.ceil(this.#header.samples / tileSize);
+        const maxTileY = Math.ceil(this.#header.lines / tileSize);
         const visibleTiles = this.#calculateVisibleTiles();
         const visibleSet = new Set(visibleTiles.map(t => `${t.x},${t.y}`));
         const centerX = Math.floor((visibleTiles.reduce((sum, t) => sum + t.x, 0) / visibleTiles.length) || 0);
@@ -1002,43 +933,50 @@ export class ViewerRuntime extends EventEmitter {
         for (let y = 0; y < maxTileY; y++) {
             for (let x = 0; x < maxTileX; x++) {
                 const tileKey = `${x},${y}`;
-                if (!visibleSet.has(tileKey) && !this.#activeTileState.has(tileKey)) {
+                if (!visibleSet.has(tileKey) && !this.#renderSession.hasActiveTile(tileKey)) {
                     const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
-                    this.#preloadQueue.push({ tile: { x, y }, dist });
+                    preloadEntries.push({ tile: { x, y }, dist });
                 }
             }
         }
-        this.#preloadQueue.sort((a, b) => a.dist - b.dist);
-        this.emit('log', `Starting smart preloading: ${this.#preloadQueue.length} tiles queued for background loading.`);
+        preloadEntries.sort((a, b) => a.dist - b.dist);
+        this.#workScheduler.startPreloading(preloadEntries);
+        this.emit('log', `Starting smart preloading: ${this.#workScheduler.getPreloadCount()} tiles queued for background loading.`);
         this.#processPreloadQueue();
     }
 
     #processPreloadQueue() {
-        if (!this.#isPreloading || this.#isTransitioning) return;
-        while (this.#idleWorkers.length > 0 && this.#preloadQueue.length > 0 && this.#tileRequestQueue.size === 0) {
-            const { tile } = this.#preloadQueue.shift();
+        if (!this.#workScheduler.isPreloading() || this.#renderSession.isTransitioning()) return;
+        while (this.#workScheduler.hasIdleWorker() && this.#workScheduler.hasPreloadEntries() && !this.#workScheduler.hasTileRequests()) {
+            const nextEntry = this.#workScheduler.takeNextPreloadEntry();
+            if (!nextEntry?.tile) {
+                continue;
+            }
+            const { tile } = nextEntry;
             const tileKey = `${tile.x},${tile.y}`;
-            if (!this.#activeTileState.has(tileKey)) {
-                this.#activeTileState.set(tileKey, this.#TILE_RENDERING_KEY);
-                const worker = this.#idleWorkers.pop();
+            if (this.#renderSession.markActiveTilePending(tileKey)) {
+                const worker = this.#workScheduler.takeIdleWorker();
+                if (!worker) {
+                    this.#renderSession.removeCurrentTile(tileKey);
+                    this.#workScheduler.enqueueTileRequest(tileKey, tile);
+                    break;
+                }
                 const bandsPayload = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
                  console.log(`[主线程-1-发送任务] (预加载) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
-                this.#postTrackedWorkerRequest(worker, WorkerCommand.LOAD_TILE, {
+                this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
                     sourceId: this.#activeSourceId,
-                    requestId: this.#createTileRequestId(tile, bandsPayload, 'preload'),
-                    payload: {
-                        hdrBytes: this.#hdrBytes,
-                        imgFile: this.#imgFile,
-                        tile,
-                        bands: bandsPayload,
-                        globalStats: this.#globalStats,
-                        header: this.#header,
-                    },
-                });
+                    hdrBytes: this.#hdrBytes,
+                    dataSource: this.#dataSourceDescriptor,
+                    tile,
+                    bands: bandsPayload,
+                    globalStats: this.#globalStats,
+                    header: this.#header,
+                    phase: 'preload',
+                }));
             }
         }
-        if (this.#preloadQueue.length === 0 && this.#isPreloading) {
-            this.#isPreloading = false;
+        if (!this.#workScheduler.hasPreloadEntries() && this.#workScheduler.isPreloading()) {
+            this.#workScheduler.stopPreloading();
             this.emit('log', "All tile preloads completed.");
         }
     }
@@ -1054,24 +992,27 @@ export class ViewerRuntime extends EventEmitter {
         this.#pendingSpectrumResolvers.clear();
     }
 
+    #finalizeTransitionFrame() {
+        this.#canvas.style.opacity = '0';
+        setTimeout(() => {
+            this.#renderSession.completeTransition({
+                renderer: this.#renderer,
+                sourceId: this.#activeSourceId,
+            });
+            requestAnimationFrame(() => this.#updateAndDraw());
+            this.emit('statechange', { loading: false });
+            setTimeout(() => this.#canvas.style.opacity = '1', 20);
+        }, 200);
+    }
+
     #resetSourceState({
         canceledSourceId = this.#cubeStore?.getSourceId() ?? 0,
         cancelReason = 'source-invalidated',
     } = {}) {
         this.#cancelSourceRequests(canceledSourceId, cancelReason);
-        this.#isPreloading = false;
-        this.#isWaitingForStats = false;
-        this.#isTransitioning = false;
-        this.#transitionTileCounter = 0;
-        this.#preloadQueue = [];
-        this.#tileRequestQueue.clear();
-        this.#backgroundStatsQueue = [];
-        this.#totalBandsForStats = 0;
+        this.#workScheduler.resetSourceWorkState();
         this.#rejectPendingSpectrumRequests('Viewer source unloaded.');
         this.#renderer?.disposeSource(canceledSourceId);
-        this.#activeTileState.clear();
-        this.#transitionTileState?.clear();
-        this.#transitionTileState = null;
         this.#metadataCache.clearSource(canceledSourceId);
         this.#statsCache.clearSource(canceledSourceId);
         this.#globalStats = null;
@@ -1079,7 +1020,7 @@ export class ViewerRuntime extends EventEmitter {
         this.#cubeStore?.unload();
         this.#cubeStore = null;
         this.#hdrBytes = null;
-        this.#imgFile = null;
+        this.#dataSourceDescriptor = null;
         this.#header = null;
         this.#performance = {
             loadStartTime: 0,
@@ -1088,33 +1029,15 @@ export class ViewerRuntime extends EventEmitter {
             initialVisibleTiles: new Set(),
             completedInitialTiles: new Set(),
         };
-        this.#scale = 1.0;
-        this.#offsetX = 0.0;
-        this.#offsetY = 0.0;
-    }
-
-    #createStatsRequestId(bands, isInitial = false) {
-        const bandKey = Array.isArray(bands) ? bands.join(',') : String(bands);
-        const phase = isInitial ? 'initial' : 'background';
-        return `stats:${this.#activeSourceId}:${phase}:${bandKey}`;
-    }
-
-    #createTileRequestId(tile, bands, phase = 'visible') {
-        const bandKey = Array.isArray(bands) ? bands.join(',') : String(bands);
-        return `tile:${this.#activeSourceId}:${phase}:${tile.x},${tile.y}:${bandKey}`;
+        this.#renderSession.resetSourceState();
     }
 
     #getAspectRatioCorrection() {
-        if (!this.#header || !this.#canvas.clientWidth || !this.#canvas.clientHeight) return { x: 1.0, y: 1.0 };
-        const imageAspect = this.#header.samples / this.#header.lines;
-        const canvasAspect = this.#canvas.clientWidth / this.#canvas.clientHeight;
-        let aspectX = 1.0, aspectY = 1.0;
-        if (imageAspect > canvasAspect) {
-            aspectY = canvasAspect / imageAspect;
-        } else {
-            aspectX = imageAspect / canvasAspect;
-        }
-        return { x: aspectX, y: aspectY };
+        return this.#renderSession.getAspectRatioCorrection({
+            header: this.#header,
+            canvasWidth: this.#canvas.clientWidth,
+            canvasHeight: this.#canvas.clientHeight,
+        });
     }
 
     #resizeCanvas() {
@@ -1153,15 +1076,10 @@ export class ViewerRuntime extends EventEmitter {
         }
 
         const message = event.message ?? 'WebGPU device lost.';
-        const shouldResumeTransition = this.#isTransitioning;
+        const shouldResumeTransition = this.#renderSession.resetForRendererRecovery();
         this.emit('log', `Renderer lifecycle event: ${message}`);
-        this.#activeTileState.clear();
-        this.#transitionTileState?.clear();
-        this.#transitionTileState = null;
-        this.#isTransitioning = false;
-        this.#tileRequestQueue.clear();
-        this.#preloadQueue = [];
-        this.#isPreloading = false;
+        this.#workScheduler.clearTileRequests();
+        this.#workScheduler.stopPreloading();
         this.#resumeTransitionAfterRendererRecovery = shouldResumeTransition;
         void this.#recoverRendererAfterDeviceLoss();
     }
@@ -1173,9 +1091,9 @@ export class ViewerRuntime extends EventEmitter {
 
         this.#rendererRecoveryPromise = (async () => {
             try {
-                this.emit('log', 'Reinitializing WebGPU renderer after device loss...');
+                this.emit('log', 'Reinitializing renderer after device loss...');
                 await this.#renderer.init();
-                this.emit('log', 'WebGPU renderer recovered after device loss.');
+                this.emit('log', `Renderer recovered after device loss (${this.#renderer.getKind?.() ?? 'unknown'}).`);
 
                 if (this.#resumeTransitionAfterRendererRecovery && this.#header && this.#globalStats) {
                     this.#resumeTransitionAfterRendererRecovery = false;

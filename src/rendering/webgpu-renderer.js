@@ -355,9 +355,10 @@ export class WebGpuRenderer {
 
     #getTileTransform({ header, tile, effectiveWidth, effectiveHeight, viewState }) {
         const { x: aspectX, y: aspectY } = this.#getAspectRatioCorrection(header);
-        const scale = viewState.scale ?? 1;
-        const offsetX = viewState.offsetX ?? 0;
-        const offsetY = viewState.offsetY ?? 0;
+        const normalizedViewState = viewState ?? {};
+        const scale = normalizedViewState.scale ?? 1;
+        const offsetX = normalizedViewState.offsetX ?? 0;
+        const offsetY = normalizedViewState.offsetY ?? 0;
         const tileScaleX = (effectiveWidth / header.samples) * aspectX;
         const tileScaleY = (effectiveHeight / header.lines) * aspectY;
         const tileOffsetX = ((tile.x * 512 + effectiveWidth / 2) / header.samples * 2 - 1) * aspectX;

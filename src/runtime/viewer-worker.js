@@ -14,6 +14,7 @@ import {
     createWorkerError,
     createWorkerResponse,
 } from '../protocol/worker-protocol.js';
+import { createDataSourceFromDescriptor } from '../sources/data-source.js';
 import { createWorkerCancelRegistry } from './worker-cancel-registry.js';
 
 // EN: Wasm functions that will be loaded dynamically.
@@ -106,7 +107,8 @@ self.onmessage = async (e) => {
         //     global statistics (min/max) for specified bands.
         // ZH: 处理 'calculate_stats' 消息。触发对指定波段的全局统计数据（最小值/最大值）的计算。
         case WorkerCommand.CALCULATE_STATS: {
-            const { hdrBytes, imgFile, bands, header, isInitial } = payload;
+            const { hdrBytes, dataSource: dataSourceDescriptor, bands, header, isInitial } = payload;
+            const dataSource = createDataSourceFromDescriptor(dataSourceDescriptor);
             setActiveRequest(sourceId, requestId);
             try {
                 if (cancelRegistry.consume(sourceId, requestId)) {
@@ -117,7 +119,7 @@ self.onmessage = async (e) => {
                     break;
                 }
                 const enviReader = new EnviReader(hdrBytes);
-                const stats = await calculateGlobalStats(enviReader, imgFile, bands, header, isInitial);
+                const stats = await calculateGlobalStats(enviReader, dataSource, bands, header, isInitial);
                 if (cancelRegistry.consume(sourceId, requestId)) {
                     self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
                         sourceId,
@@ -154,7 +156,8 @@ self.onmessage = async (e) => {
         //     normalizes it, and renders it into an RGBA pixel array.
         // ZH: 处理 'load_tile' 消息。加载特定瓦片的数据，进行归一化处理，并将其渲染为 RGBA 像素阵列。
         case WorkerCommand.LOAD_TILE: {
-            const { hdrBytes, imgFile, tile, bands, globalStats, header } = payload;
+            const { hdrBytes, dataSource: dataSourceDescriptor, tile, bands, globalStats, header } = payload;
+            const dataSource = createDataSourceFromDescriptor(dataSourceDescriptor);
             const enviReader = new EnviReader(hdrBytes);
             setActiveRequest(sourceId, requestId);
             try {
@@ -165,7 +168,7 @@ self.onmessage = async (e) => {
                     }));
                     break;
                 }
-                const result = await loadAndRenderTile(enviReader, imgFile, tile, bands, globalStats, header);
+                const result = await loadAndRenderTile(enviReader, dataSource, tile, bands, globalStats, header);
                 if (cancelRegistry.consume(sourceId, requestId)) {
                     self.postMessage(createWorkerResponse(WorkerResponse.CANCELED, {
                         sourceId,
@@ -204,7 +207,8 @@ self.onmessage = async (e) => {
             break;
         }
         case WorkerCommand.GET_SPECTRUM: {
-            const { hdrBytes, imgFile, x, y, header } = payload;
+            const { hdrBytes, dataSource: dataSourceDescriptor, x, y, header } = payload;
+            const dataSource = createDataSourceFromDescriptor(dataSourceDescriptor);
             const enviReader = new EnviReader(hdrBytes);
             setActiveRequest(sourceId, requestId);
             try {
@@ -230,7 +234,7 @@ self.onmessage = async (e) => {
                 let spectrum = new Float32Array(nB);
                 const interleave = header.interleave;
                 if (interleave === 'bip') {
-                    const chunkInfo = await getBipTileChunk(imgFile, header, tileX, tileY);
+                    const chunkInfo = await getBipTileChunk(dataSource, header, tileX, tileY);
                     if (!chunkInfo) throw new Error('Failed to read BIP chunk');
                     const bands = Array.from({ length: nB }, (_, i) => i + 1);
                     const extractedBands = enviReader.extractBipTileForBandsRaw(
@@ -249,7 +253,7 @@ self.onmessage = async (e) => {
                 } else {
                     const getFn = interleave === 'bil' ? getBilTileForBand_Optimized : getBsqTileForBand;
                     for (let b = 0; b < nB; b++) {
-                        const tile_data = await getFn(enviReader, imgFile, header, b, tileX, tileY);
+                        const tile_data = await getFn(enviReader, dataSource, header, b, tileX, tileY);
                         spectrum[b] = tile_data && tile_data.length > index ? tile_data[index] : 0;
                     }
                 }
@@ -300,7 +304,7 @@ self.onmessage = async (e) => {
  *     然后将它们合成为一个用于渲染的 RGBA Uint8Array 数组。
  * @returns {Promise<Object|null>} A promise that resolves with the rendered tile data or null on failure.
  */
-async function loadAndRenderTile(enviReader, imgFile, tile, bands, globalStats, header) {
+async function loadAndRenderTile(enviReader, dataSource, tile, bands, globalStats, header) {
     const { x, y } = tile;
     const TILE_SIZE = 512;
     
@@ -326,9 +330,9 @@ async function loadAndRenderTile(enviReader, imgFile, tile, bands, globalStats, 
     // EN: Fetch data for all three bands in parallel.
     // ZH: 并行获取所有三个波段的数据。
     [tileR, tileG, tileB] = await Promise.all([
-        getTileFn(enviReader, imgFile, header, rIdx, x, y),
-        getTileFn(enviReader, imgFile, header, gIdx, x, y),
-        getTileFn(enviReader, imgFile, header, bIdx, x, y),
+        getTileFn(enviReader, dataSource, header, rIdx, x, y),
+        getTileFn(enviReader, dataSource, header, gIdx, x, y),
+        getTileFn(enviReader, dataSource, header, bIdx, x, y),
     ]);
 
     if (!tileR || tileR.length === 0 || !globalStats[rBand] || !globalStats[gBand] || !globalStats[bBand]) {
@@ -383,7 +387,7 @@ function calculateBsqTileSliceRange(h, bandIndex, tileY, tileSize) {
  * EN: Helper function to extract a single band's data for a specific tile from a BIL file.
  * ZH: 辅助函数，用于从 BIL 格式文件中为特定瓦片提取单个波段的数据。
  */
-async function getBilTileForBand_Optimized(enviReader, imgFile, header, bandIndex, tileX, tileY) {
+async function getBilTileForBand_Optimized(enviReader, dataSource, header, bandIndex, tileX, tileY) {
     const TILE_SIZE = 512;
     const { samples: iW, lines: iH, bands: nB, bytesPerPixel: bpp, headerOffset: hO } = header;
     const startLine = tileY * TILE_SIZE;
@@ -396,8 +400,7 @@ async function getBilTileForBand_Optimized(enviReader, imgFile, header, bandInde
     const sliceStart = hO + startLine * bytesPerFullLine;
     const sliceEnd = sliceStart + effectiveHeight * bytesPerFullLine;
     
-    const chunkBlob = imgFile.slice(sliceStart, sliceEnd);
-    const chunkData = new Uint8Array(await chunkBlob.arrayBuffer());
+    const chunkData = new Uint8Array(await dataSource.read({ start: sliceStart, end: sliceEnd }));
 
     return enviReader.extractBilTileRaw(chunkData, sliceStart, bandIndex, tileX, tileY, TILE_SIZE, TILE_SIZE);
 }
@@ -406,7 +409,7 @@ async function getBilTileForBand_Optimized(enviReader, imgFile, header, bandInde
  * EN: Helper function to extract a single band's data for a specific tile from a BIP file.
  * ZH: 辅助函数，用于从 BIP 格式文件中为特定瓦片提取单个波段的数据。
  */
-async function getBipTileForBand_Optimized(enviReader, imgFile, header, bandIndex, tileX, tileY) {
+async function getBipTileForBand_Optimized(enviReader, dataSource, header, bandIndex, tileX, tileY) {
     const TILE_SIZE = 512;
     const { samples: iW, lines: iH, bands: nB, bytesPerPixel: bpp, headerOffset: hO } = header;
     const startLine = tileY * TILE_SIZE;
@@ -419,8 +422,7 @@ async function getBipTileForBand_Optimized(enviReader, imgFile, header, bandInde
     const sliceStart = hO + startLine * bytesPerFullLine;
     const sliceEnd = sliceStart + effectiveHeight * bytesPerFullLine;
 
-    const chunkBlob = imgFile.slice(sliceStart, sliceEnd);
-    const chunkData = new Uint8Array(await chunkBlob.arrayBuffer());
+    const chunkData = new Uint8Array(await dataSource.read({ start: sliceStart, end: sliceEnd }));
 
     return enviReader.extractBipTileRaw(chunkData, sliceStart, bandIndex, tileX, tileY, TILE_SIZE, TILE_SIZE);
 }
@@ -429,14 +431,13 @@ async function getBipTileForBand_Optimized(enviReader, imgFile, header, bandInde
  * EN: Helper function to extract a single band's data for a specific tile from a BSQ file.
  * ZH: 辅助函数，用于从 BSQ 格式文件中为特定瓦片提取单个波段的数据。
  */
-async function getBsqTileForBand(enviReader, imgFile, header, bandIndex, tileX, tileY) {
+async function getBsqTileForBand(enviReader, dataSource, header, bandIndex, tileX, tileY) {
     const TILE_SIZE = 512;
     const sliceRange = calculateBsqTileSliceRange(header, bandIndex, tileY, TILE_SIZE);
     if (!sliceRange || sliceRange.start >= sliceRange.end) {
         return new Float32Array(0);
     }
-    const chunkBlob = imgFile.slice(sliceRange.start, sliceRange.end);
-    const chunkData = new Uint8Array(await chunkBlob.arrayBuffer());
+    const chunkData = new Uint8Array(await dataSource.read(sliceRange));
     return enviReader.extractBsqTileRaw(chunkData, sliceRange.start, bandIndex, tileX, tileY, TILE_SIZE, TILE_SIZE);
 }
 
@@ -445,7 +446,7 @@ async function getBsqTileForBand(enviReader, imgFile, header, bandIndex, tileX, 
  *     This is an optimization to reduce disk I/O.
  * ZH: 读取 BIP 文件的一个数据块，该数据块包含了特定瓦片区域的所有波段。这是一种减少磁盘 I/O 的优化。
  */
-async function getBipTileChunk(imgFile, header, tileX, tileY) {
+async function getBipTileChunk(dataSource, header, tileX, tileY) {
     const TILE_SIZE = 512;
     const { samples: iW, lines: iH, bands: nB, bytesPerPixel: bpp, headerOffset: hO } = header;
     const startLine = tileY * TILE_SIZE;
@@ -458,9 +459,8 @@ async function getBipTileChunk(imgFile, header, tileX, tileY) {
     const sliceStart = hO + startLine * bytesPerFullLine;
     const sliceEnd = sliceStart + effectiveHeight * bytesPerFullLine;
 
-    const chunkBlob = imgFile.slice(sliceStart, sliceEnd);
     return {
-        chunkData: new Uint8Array(await chunkBlob.arrayBuffer()),
+        chunkData: new Uint8Array(await dataSource.read({ start: sliceStart, end: sliceEnd })),
         chunkStartOffset: sliceStart
     };
 }
@@ -473,7 +473,7 @@ async function getBipTileChunk(imgFile, header, tileX, tileY) {
  *     这是一种性能优化。对于 BIP 文件，它会一次性读取包含所有波段的数据块，以最小化磁盘 I/O。
  * @returns {Promise<Object>} A promise that resolves to an object containing the statistics for each band.
  */
-async function calculateGlobalStats(enviReader, imgFile, bands, header, isInitial = false) {
+async function calculateGlobalStats(enviReader, dataSource, bands, header, isInitial = false) {
     const TILE_SIZE = 512;
     const finalStats = {};
     // EN: Use fewer samples for the initial, faster calculation.
@@ -497,7 +497,7 @@ async function calculateGlobalStats(enviReader, imgFile, bands, header, isInitia
                 if (interleave === 'bip') {
                     // 1. EN: Read the raw data block containing all bands (one disk read).
                     //    ZH: 读取包含所有波段的原始数据块（一次磁盘读取）。
-                    const chunkInfo = await getBipTileChunk(imgFile, header, randTileX, randTileY);
+                    const chunkInfo = await getBipTileChunk(dataSource, header, randTileX, randTileY);
                     if (!chunkInfo) return;
                     
                     // 2. EN: Call Wasm to extract all required band samples at once.
@@ -528,8 +528,8 @@ async function calculateGlobalStats(enviReader, imgFile, bands, header, isInitia
                     await Promise.all(bands.map(async (band) => {
                         let tile_data;
                         const bandIndex = band - 1;
-                        if (interleave === 'bil') tile_data = await getBilTileForBand_Optimized(enviReader, imgFile, header, bandIndex, randTileX, randTileY);
-                        else if (interleave === 'bsq') tile_data = await getBsqTileForBand(enviReader, imgFile, header, bandIndex, randTileX, randTileY);
+                        if (interleave === 'bil') tile_data = await getBilTileForBand_Optimized(enviReader, dataSource, header, bandIndex, randTileX, randTileY);
+                        else if (interleave === 'bsq') tile_data = await getBsqTileForBand(enviReader, dataSource, header, bandIndex, randTileX, randTileY);
                         
                         if (tile_data && tile_data.length > 0) {
                             bandSamples.get(band).push(tile_data);

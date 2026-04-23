@@ -1,5 +1,297 @@
 # CubeScope
 
+[中文](#中文说明) | [English](#english)
+
+## 中文说明
+
+CubeScope 是一个面向 ENVI 高光谱数据集的浏览器原生、本地优先、硬件加速
+viewer kernel。
+
+当前 alpha 阶段刻意保持收敛，目标很明确：
+
+- 加载本地 ENVI `.hdr + 数据文件` 成对文件
+- 在浏览器中渲染伪 RGB 影像
+- 查看元数据与像素光谱
+- 在不依赖服务端栈的前提下采集基础交互性能指标
+
+CubeScope 目前还不是完整的遥感分析工作台。它的定位是一个可嵌入、可复用的
+viewer core，供后续分析插件和下游应用构建。
+
+## Alpha 状态
+
+- npm 包身份：`@cubescope/web`
+- 当前发布目标：`0.1.0-alpha.1`
+- 仓库可见性：在 alpha 验收闸门全部通过前保持私有
+- 包格式：仅 ESM
+- 当前浏览器目标：优先 WebGPU，同时提供 WebGL 兼容渲染路径
+- 本地 smoke / benchmark 验证链：固定使用 WebGL 兼容模式，确保私有 alpha 可复现
+
+## 仓库内已验证的快速开始路径
+
+这是当前 alpha 的主可复现路径。
+
+### 前置要求
+
+- Node.js `22.x`
+- npm `>=10`
+- 通过 `rustup` 管理的 Rust stable toolchain
+- Rust target：`wasm32-unknown-unknown`
+- `wasm-bindgen-cli 0.2.100`
+
+### 安装与准备
+
+```bash
+npm ci
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.100
+npm run fixtures:generate
+npm run build
+npm run test
+```
+
+### 启动 demo
+
+```bash
+npm run dev
+```
+
+然后在本地 Vite 服务中打开
+[`/examples/`](http://127.0.0.1:5173/examples/)，并加载
+`test-data/fixtures/` 下的 synthetic fixture。
+
+### Synthetic Fixture
+
+仓库自带了一个确定性的 ENVI synthetic fixture，用于 smoke test、
+benchmark 和可复现截图：
+
+- id：`cubescope-mini-cube`
+- 尺寸：`48 x 48 x 32`
+- interleave：`bsq`
+- data type：`u16`
+- byte order：`lsb`
+- 生成命令：`npm run fixtures:generate`
+- manifest：`test-data/fixtures/cubescope-mini-cube.json`
+
+## SDK 使用方式
+
+alpha 阶段的公开 API 仍然保持类式接口。
+
+```js
+import CubeViewer from '@cubescope/web';
+
+const container = document.getElementById('viewer');
+const viewer = new CubeViewer(container);
+
+await viewer.init();
+
+await viewer.load({
+  kind: 'envi-local',
+  headerFile: hdrFile,
+  dataFile: imgFile,
+});
+```
+
+The same API also supports remote ENVI sources when the server honors
+`HTTP range` requests:
+
+```js
+await viewer.load({
+  kind: 'envi-http',
+  headerUrl: 'https://example.com/cubes/demo.hdr',
+  dataUrl: 'https://example.com/cubes/demo.img',
+});
+```
+
+远程模式要求服务端同时允许浏览器 CORS 访问并支持 `HTTP range`。
+仓库自带的 deterministic 远程样例会在开发/构建后暴露为
+`/fixtures/cubescope-mini-cube.hdr` 与 `/fixtures/cubescope-mini-cube.img`。
+
+也可以通过支持 `HTTP range` 的远程地址加载：
+
+```js
+await viewer.load({
+  kind: 'envi-http',
+  headerUrl: 'https://example.com/cubes/demo.hdr',
+  dataUrl: 'https://example.com/cubes/demo.img',
+});
+```
+
+The remote mode requires browser-visible CORS plus `HTTP range` support on the
+server side.
+For deterministic local validation, the repo also exposes a same-origin sample
+at `/fixtures/cubescope-mini-cube.hdr` and `/fixtures/cubescope-mini-cube.img`.
+
+### 兼容别名
+
+`loadFile(hdrFile, dataFile)` 仍然保留用于兼容，但主入口已经固定为
+`load(source)`，其中 `envi-local` 是本地工作流，`envi-http` 是远程
+`HTTP range` 工作流。
+
+## 已发布 SDK 的运行时资源布局
+
+当前 alpha 只保留一个公开浏览器 SDK，同时暴露显式运行时资源：
+
+- `@cubescope/web`
+- `@cubescope/web/worker.js`
+- `@cubescope/web/pkg/envi_parser.js`
+- `@cubescope/web/pkg/envi_parser_bg.wasm`
+
+如果你的应用会把包内资源与 ESM 入口一起对外提供，那么默认构造方式通常不需要
+额外配置。对于会重写资源 URL 的 bundler，推荐显式传入资源地址：
+
+```js
+import CubeViewer from '@cubescope/web';
+import workerUrl from '@cubescope/web/worker.js?url';
+import wasmJsUrl from '@cubescope/web/pkg/envi_parser.js?url';
+import wasmWasmUrl from '@cubescope/web/pkg/envi_parser_bg.wasm?url';
+
+const viewer = new CubeViewer(container, {
+  workerUrl,
+  wasmJsUrl,
+  wasmWasmUrl,
+});
+```
+
+在 `0.x` 阶段，包里仍保留 `EnviViewer` 作为兼容导出别名，但推荐公开名称已经是
+`CubeViewer`。
+
+## 稳定 Alpha API
+
+### 构造函数
+
+```js
+const viewer = new CubeViewer(container, options);
+```
+
+`options`：
+
+- `workerUrl?: string`
+- `wasmJsUrl?: string`
+- `wasmWasmUrl?: string`
+- `enableBackgroundStats?: boolean`
+- `enableTilePreloading?: boolean`
+
+### 方法
+
+- `init(): Promise<void>`
+- `load(source): Promise<void>`
+- `loadFile(hdrFile, dataFile): Promise<void>` 兼容别名
+- `unload(): Promise<void>`
+- `setBands({ r, g, b }): void`
+- `updateConfig(partialConfig): void`
+- `getHeader(): CubeHeader | null`
+- `getSpectralProfile(x, y): Promise<Float32Array | null>`
+- `pixelToWorld(x, y): { x, y } | null`
+- `worldToPixel(x, y): { x, y } | null`
+- `destroy(): void`
+
+当 ENVI 头信息包含 `map info` 或 `coordinate system string` 时，`getHeader()`
+返回的 `spatialReference` 会带有结构化 `mapInfo` 和推导出的
+`affineTransform`。
+
+### 稳定事件
+
+- `ready`
+- `loadstart`
+- `loadend`
+- `header`
+- `bandschange`
+- `progress`
+- `performance`
+- `error`
+- `image-clicked`
+
+包装层仍保留以下兼容事件别名：
+
+- `headerloaded`
+- `bandschanged`
+
+另外还有一些兼容透传事件当前依然会发出，但它们不属于最小 alpha 合约的一部分：
+
+- `metadata`
+- `statechange`
+- `log`
+- `destroyed`
+
+## 二进制数据约定
+
+CubeScope 把大二进制数据流转视为架构约束的一部分：
+
+- 元数据和控制消息可以走普通对象传递
+- tile、spectrum 等大缓冲区应通过 `Transferable` 所有权转移跨线程传递
+- `SharedArrayBuffer` 是可选优化，不是 alpha 正确运行的前提
+
+## 仓库命令
+
+```bash
+# 重建 Rust/WASM 运行时
+npm run build:wasm
+
+# 构建 SDK bundle、worker bundle 与运行时资源
+npm run build
+
+# 验证 tarball 能否被隔离 consumer app 安装并导入
+npm run verify:pack
+
+# 生成本地 alpha 验证汇总
+npm run report:alpha
+
+# 运行 contract tests 与浏览器 smoke tests
+npm run test
+
+# 检查当前本地 toolchain，并探测 Node 22 运行时是否可用
+npm run report:toolchain
+
+# 采集软件论文附录所需的早期 benchmark 指标
+npm run benchmark
+
+# 为候选 public remote sample 生成预览 catalog
+npm run create:sample-catalog -- --id candidate-id --title "Candidate" --header-url "https://example.com/file.hdr" --data-url "https://example.com/file.img" --output public/samples/remote-samples.preview.json
+
+# 对候选 public remote sample 做浏览器资格审查
+npm run qualify:sample -- --id candidate-id --title "Candidate" --header-url "https://example.com/file.hdr" --data-url "https://example.com/file.img"
+
+# 一键执行 preview catalog + 资格审查 + 浏览器验证
+npm run validate:sample-candidate -- --id candidate-id --title "Candidate" --header-url "https://example.com/file.hdr" --data-url "https://example.com/file.img"
+
+# 验证已注册远程样例的 HTTP range 与 demo 载入链
+npm run validate:samples
+
+# 在检测到的本地 Node 22 运行时下重跑 alpha 验证链
+npm run verify:node22-local
+
+# 不改 shipped catalog，直接验证预览 catalog
+CUBESCOPE_SAMPLE_CATALOG_URL=/samples/remote-samples.preview.json CUBESCOPE_REGISTERED_SAMPLE_ID=candidate-id npm run validate:samples
+
+# 运行完整本地 alpha 验证链
+npm run verify:alpha
+```
+
+## 可复现性与文档
+
+- 架构文档：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- API 合约：[docs/API.md](docs/API.md)
+- Blueprint：[docs/CUBESCOPE_BLUEPRINT.md](docs/CUBESCOPE_BLUEPRINT.md)
+- 路线图：[docs/ROADMAP.md](docs/ROADMAP.md)
+- 文档评审：[docs/DOCUMENTATION_REVIEW.md](docs/DOCUMENTATION_REVIEW.md)
+- 下一阶段任务：[docs/NEXT_DEVELOPMENT_TASKS.md](docs/NEXT_DEVELOPMENT_TASKS.md)
+- 远程样例工作流：[docs/REMOTE_SAMPLE_WORKFLOW.md](docs/REMOTE_SAMPLE_WORKFLOW.md)
+- 复现说明：[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)
+- Alpha 发布检查清单：[docs/ALPHA_RELEASE_CHECKLIST.md](docs/ALPHA_RELEASE_CHECKLIST.md)
+
+## 引用
+
+如果 CubeScope 对你的工作有帮助，请在 alpha tag 正式发布后引用对应软件版本。
+引用元数据见 [`CITATION.cff`](CITATION.cff)。
+
+## 许可证
+
+CubeScope 使用 MIT License 发布。详见 [LICENSE](LICENSE)。
+
+---
+
+## English
+
 CubeScope is a browser-native, local-first, hardware-accelerated viewer kernel
 for ENVI hyperspectral datasets.
 
@@ -19,8 +311,8 @@ core that future analysis plugins and downstream applications can build on.
 - release target: `0.1.0-alpha.1`
 - repository visibility: private until the alpha acceptance gates pass
 - package format: ESM-only
-- current browser target: WebGPU-capable browsers
-- fallback renderer: not part of this alpha
+- current browser target: prefer WebGPU, with a WebGL compatibility renderer available
+- local smoke / benchmark verification: pinned to the WebGL compatibility path for deterministic private-alpha validation
 
 ## Verified Quickstart From This Repository
 
@@ -89,7 +381,8 @@ await viewer.load({
 ### Compatibility Alias
 
 `loadFile(hdrFile, dataFile)` remains available for compatibility, but
-`load({ kind: 'envi-local', headerFile, dataFile })` is the primary interface.
+`load(source)` is now the primary interface: `envi-local` for local files and
+`envi-http` for remote `HTTP range` sources.
 
 ## Runtime Asset Layout For The Published SDK
 
@@ -146,7 +439,13 @@ const viewer = new CubeViewer(container, options);
 - `updateConfig(partialConfig): void`
 - `getHeader(): CubeHeader | null`
 - `getSpectralProfile(x, y): Promise<Float32Array | null>`
+- `pixelToWorld(x, y): { x, y } | null`
+- `worldToPixel(x, y): { x, y } | null`
 - `destroy(): void`
+
+When the ENVI header includes `map info` or `coordinate system string`,
+`getHeader()` may expose a normalized `spatialReference` with structured
+`mapInfo` and a derived `affineTransform`.
 
 ### Stable Events
 
@@ -194,11 +493,35 @@ npm run build
 # Verify tarball install + import from an isolated consumer app
 npm run verify:pack
 
+# Write the consolidated local alpha verification summary
+npm run report:alpha
+
 # Run contract and browser smoke tests
 npm run test
 
+# Inspect the local toolchain and discover whether a Node 22 runtime is available
+npm run report:toolchain
+
 # Capture the early benchmark metrics used by the software-paper appendix
 npm run benchmark
+
+# Generate a preview catalog for a candidate public remote sample
+npm run create:sample-catalog -- --id candidate-id --title "Candidate" --header-url "https://example.com/file.hdr" --data-url "https://example.com/file.img" --output public/samples/remote-samples.preview.json
+
+# Qualify a candidate public remote sample before adding it to the shipped catalog
+npm run qualify:sample -- --id candidate-id --title "Candidate" --header-url "https://example.com/file.hdr" --data-url "https://example.com/file.img"
+
+# Run the full candidate pipeline: preview catalog + qualification + browser validation
+npm run validate:sample-candidate -- --id candidate-id --title "Candidate" --header-url "https://example.com/file.hdr" --data-url "https://example.com/file.img"
+
+# Validate the registered remote-sample catalog against transport + demo load
+npm run validate:samples
+
+# Rerun the alpha verification chain under a detected local Node 22 runtime
+npm run verify:node22-local
+
+# Validate a preview catalog without editing the shipped catalog first
+CUBESCOPE_SAMPLE_CATALOG_URL=/samples/remote-samples.preview.json CUBESCOPE_REGISTERED_SAMPLE_ID=candidate-id npm run validate:samples
 
 # Run the full local alpha verification chain
 npm run verify:alpha

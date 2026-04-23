@@ -1,4 +1,9 @@
 import CubeViewer from '../src/cube-viewer.js';
+import {
+    buildRemoteSampleLoadSource,
+    fetchRemoteSampleCatalog,
+    getRemoteSampleById,
+} from '../src/samples/remote-sample-catalog.js';
 import { EChartsPerformanceChart } from './demo/echarts-performance-chart.js';
 import { PerformanceMonitorRust } from './demo/rust-performance-monitor.js';
 import { SystemMonitorPanel } from './demo/system-monitor-panel.js';
@@ -6,6 +11,8 @@ import { DebugPanel } from './demo/debug-panel.js';
 
 // --- (EN) DOM Element References / (ZH) DOM 元素引用 ---
 const selectFileBtn = document.getElementById('selectFileBtn');
+const sampleCatalogSelect = document.getElementById('sampleCatalogSelect');
+const loadSampleBtn = document.getElementById('loadSampleBtn');
 const fileInput = document.getElementById('fileInput');
 const fileNameSpan = document.getElementById('fileNameSpan');
 const viewerContainer = document.getElementById('viewer-container');
@@ -24,11 +31,20 @@ let spectralSeries = [];
 let echartsLib = null;
 const demoQuery = new URLSearchParams(window.location.search);
 const benchmarkMode = demoQuery.get('benchmark') === '1';
+const requestedSampleId = demoQuery.get('sample');
+const requestedCatalogUrl = demoQuery.get('catalog')?.trim() || '/samples/remote-samples.json';
+const requestedRenderer = demoQuery.get('renderer')?.trim() || 'auto';
 const demoState = window.__cubescopeDemoState = {
     ready: false,
     benchmarkMode,
+    rendererPreference: requestedRenderer,
     viewer: null,
+    sampleCatalog: null,
+    sampleCatalogUrl: requestedCatalogUrl,
+    loadRegisteredSample: null,
+    activeSampleId: null,
     header: null,
+    metadata: null,
     loaded: false,
     metrics: [],
     errors: [],
@@ -36,6 +52,7 @@ const demoState = window.__cubescopeDemoState = {
     headerAt: null,
     headerParseTime: null,
     loadEndAt: null,
+    lastProbe: null,
 };
 
 // --- (EN) Logging Functions / (ZH) 日志函数 ---
@@ -49,6 +66,28 @@ const log = (msg) => {
     if(logDiv) logDiv.innerHTML = msg + '<br>' + logDiv.innerHTML;
 };
 const clearLog = () => { if(logDiv) logDiv.innerHTML = ''; };
+
+function formatCoordinate(value) {
+    return Number.isFinite(value) ? Number(value).toFixed(2) : 'n/a';
+}
+
+function formatProbeStatus({ pixel, world, spatialReference }) {
+    const pixelText = `Pixel (${pixel.x}, ${pixel.y})`;
+
+    if (!world) {
+        return `${pixelText} | World unavailable`;
+    }
+
+    const worldText = `World (${formatCoordinate(world.x)}, ${formatCoordinate(world.y)})`;
+    const units = spatialReference?.mapInfo?.units
+        ? ` ${spatialReference.mapInfo.units}`
+        : '';
+    const crs = spatialReference?.coordinateSystemString
+        ?? spatialReference?.mapInfo?.projectionName
+        ?? 'source CRS';
+
+    return `${pixelText} | ${worldText}${units} | ${crs}`;
+}
 
 /**
  * EN: A utility function to delay the execution of a function.
@@ -83,8 +122,57 @@ async function main() {
     const viewer = new CubeViewer(viewerContainer, {
         enableBackgroundStats: !benchmarkMode,
         enableTilePreloading: !benchmarkMode,
+        rendererPreference: requestedRenderer,
     });
     demoState.viewer = viewer;
+    log(`Renderer preference: ${requestedRenderer}`);
+
+    async function loadRegisteredSample(sampleId) {
+        const catalog = demoState.sampleCatalog;
+        if (!catalog) {
+            throw new Error('Registered sample catalog is not loaded yet.');
+        }
+
+        const sample = getRemoteSampleById(catalog, sampleId);
+        if (!sample) {
+            throw new Error(`Unknown registered sample: ${sampleId}`);
+        }
+
+        demoState.activeSampleId = sample.id;
+        if (sampleCatalogSelect) {
+            sampleCatalogSelect.value = sample.id;
+        }
+        if (fileNameSpan) {
+            fileNameSpan.textContent = sample.title;
+        }
+        log(`Loading registered sample: ${sample.title}`);
+        await viewer.load(buildRemoteSampleLoadSource(sample));
+        return sample;
+    }
+
+    demoState.loadRegisteredSample = loadRegisteredSample;
+
+    async function initializeSampleCatalog() {
+        try {
+            const catalog = await fetchRemoteSampleCatalog(demoState.sampleCatalogUrl);
+            demoState.sampleCatalog = catalog;
+            log(`Registered sample catalog ready: ${demoState.sampleCatalogUrl}`);
+            populateSampleCatalogSelect(catalog.samples);
+            enableControls();
+            return catalog;
+        } catch (error) {
+            if (sampleCatalogSelect) {
+                sampleCatalogSelect.innerHTML = '';
+                sampleCatalogSelect.add(new Option('Registered samples unavailable', ''));
+                sampleCatalogSelect.disabled = true;
+            }
+            if (loadSampleBtn) {
+                loadSampleBtn.disabled = true;
+            }
+            log(`[WARN] Registered sample catalog unavailable (${demoState.sampleCatalogUrl}): ${error.message}`);
+            return null;
+        }
+    }
 
     // Performance monitoring setup
     const perfMonitor = new PerformanceMonitorRust();
@@ -108,6 +196,7 @@ async function main() {
     });
     viewer.on('loadstart', () => {
         demoState.header = null;
+        demoState.metadata = null;
         demoState.loaded = false;
         demoState.metrics = [];
         demoState.errors = [];
@@ -115,6 +204,7 @@ async function main() {
         demoState.headerAt = null;
         demoState.headerParseTime = null;
         demoState.loadEndAt = null;
+        demoState.lastProbe = null;
         clearLog();
         disableControls('Loading file...');
     });
@@ -126,6 +216,19 @@ async function main() {
         if (bandSwitchCountSpan) bandSwitchCountSpan.textContent = `Band Switch Count: ${bandSwitchCount}`;
     });
     viewer.on('image-clicked', async ({ x, y }) => {
+        const spatialReference = viewer.getHeader()?.spatialReference;
+        const world = viewer.pixelToWorld(x, y);
+        const probe = {
+            pixel: { x, y },
+            world,
+            spatialReference,
+        };
+        demoState.lastProbe = probe;
+        const probeStatus = formatProbeStatus(probe);
+        if (statusSpan) {
+            statusSpan.textContent = probeStatus;
+        }
+        log(`[Probe] ${probeStatus}`);
         try {
             const data = await viewer.getSpectralProfile(x, y);
             if (!data || data.length === 0) {
@@ -182,6 +285,9 @@ async function main() {
         viewer.setBands({ r: 30, g: 20, b: 10 });
         enableControls();
     });
+    viewer.on('metadata', (metadata) => {
+        demoState.metadata = metadata;
+    });
     viewer.on('loadend', () => {
         demoState.loaded = true;
         demoState.loadEndAt = performance.now();
@@ -226,6 +332,20 @@ async function main() {
         });
     }
 
+    if (loadSampleBtn) {
+        loadSampleBtn.addEventListener('click', async () => {
+            try {
+                if (!sampleCatalogSelect?.value) {
+                    log('[WARN] No registered sample is selected.');
+                    return;
+                }
+                await loadRegisteredSample(sampleCatalogSelect.value);
+            } catch (error) {
+                log(`[Error] Registered sample load failed: ${error.message}`);
+            }
+        });
+    }
+
     const debouncedBandChange = debounce(() => {
         viewer.setBands({ r: rBandSelect.value, g: gBandSelect.value, b: bBandSelect.value });
     }, 300);
@@ -265,6 +385,15 @@ async function main() {
 
     disableControls('Initializing library...');
     await viewer.init();
+    await initializeSampleCatalog();
+
+    if (requestedSampleId) {
+        try {
+            await loadRegisteredSample(requestedSampleId);
+        } catch (error) {
+            log(`[Error] Auto-load sample failed: ${error.message}`);
+        }
+    }
 }
 
 function disableControls(text = 'Processing...') {
@@ -272,6 +401,8 @@ function disableControls(text = 'Processing...') {
         selectFileBtn.disabled = true;
         selectFileBtn.textContent = text;
     }
+    if (sampleCatalogSelect) sampleCatalogSelect.disabled = true;
+    if (loadSampleBtn) loadSampleBtn.disabled = true;
     if(rBandSelect) rBandSelect.disabled = true;
     if(gBandSelect) gBandSelect.disabled = true;
     if(bBandSelect) bBandSelect.disabled = true;
@@ -283,11 +414,34 @@ function enableControls() {
         selectFileBtn.disabled = false;
         selectFileBtn.textContent = 'Select HDR + Data File';
     }
+    if (sampleCatalogSelect && demoState.sampleCatalog?.samples?.length > 0) {
+        sampleCatalogSelect.disabled = false;
+    }
+    if (loadSampleBtn && demoState.sampleCatalog?.samples?.length > 0) {
+        loadSampleBtn.disabled = false;
+    }
     if (rBandSelect && rBandSelect.options.length > 0) {
         rBandSelect.disabled = false;
         gBandSelect.disabled = false;
         bBandSelect.disabled = false;
         if(randomBandsBtn) randomBandsBtn.disabled = false;
+    }
+}
+
+function populateSampleCatalogSelect(samples) {
+    if (!sampleCatalogSelect) {
+        return;
+    }
+
+    sampleCatalogSelect.innerHTML = '';
+    if (!Array.isArray(samples) || samples.length === 0) {
+        sampleCatalogSelect.add(new Option('No registered samples', ''));
+        sampleCatalogSelect.disabled = true;
+        return;
+    }
+
+    for (const sample of samples) {
+        sampleCatalogSelect.add(new Option(sample.title, sample.id));
     }
 }
 

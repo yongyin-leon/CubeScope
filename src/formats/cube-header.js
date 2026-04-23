@@ -2,6 +2,8 @@
  * @fileoverview Stable cube-header normalization for public metadata contracts.
  */
 
+import { normalizeSpatialReference } from '../spatial/coordinate-mapper.js';
+
 const INTERLEAVES = new Set(['bil', 'bip', 'bsq']);
 const BAND_DISPLAY_ROLES = new Set(['red', 'green', 'blue', 'nir', 'gray', 'other']);
 const DATA_TYPE_ALIASES = new Map([
@@ -154,31 +156,20 @@ function normalizeBandMetadata(value) {
     }));
 }
 
-function normalizeSpatialReference(value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return undefined;
-    }
+function buildRawSpatialReference(header) {
+    const directSpatialReference = header.spatialReference
+        && typeof header.spatialReference === 'object'
+        && !Array.isArray(header.spatialReference)
+        ? header.spatialReference
+        : null;
 
-    const affineTransform = Array.isArray(value.affineTransform)
-        && value.affineTransform.length === 6
-        ? Object.freeze(value.affineTransform.map((entry) => Number(entry)))
-        : undefined;
-    const epsg = value.epsg == null
-        ? undefined
-        : normalizeIntegerField('spatialReference.epsg', value.epsg);
-    const coordinateSystemString = normalizeOptionalString(value.coordinateSystemString);
-    const mapInfo = value.mapInfo == null
-        ? undefined
-        : Array.isArray(value.mapInfo)
-            ? Object.freeze([...value.mapInfo])
-            : value.mapInfo;
-
-    return Object.freeze({
-        affineTransform,
-        epsg,
-        coordinateSystemString,
-        mapInfo,
-    });
+    return {
+        ...(directSpatialReference ?? {}),
+        affineTransform: directSpatialReference?.affineTransform ?? header.affineTransform,
+        epsg: directSpatialReference?.epsg ?? header.epsg,
+        coordinateSystemString: directSpatialReference?.coordinateSystemString ?? header.coordinateSystemString,
+        mapInfo: directSpatialReference?.mapInfo ?? header.mapInfo,
+    };
 }
 
 export function normalizeCubeHeader(header) {
@@ -201,7 +192,7 @@ export function normalizeCubeHeader(header) {
         wavelength: normalizeNumberArray(header.wavelength),
         customFields: normalizeCustomFields(header.customFields),
         bandMetadata: normalizeBandMetadata(header.bandMetadata),
-        spatialReference: normalizeSpatialReference(header.spatialReference),
+        spatialReference: normalizeSpatialReference(buildRawSpatialReference(header)),
     });
 }
 

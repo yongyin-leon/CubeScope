@@ -48,12 +48,30 @@ describe('normalizeLoadSource', () => {
         });
     });
 
+    it('normalizes the canonical envi-http shape', () => {
+        expect(normalizeLoadSource({
+            kind: LoadSourceKind.ENVI_HTTP,
+            headerUrl: 'https://example.com/cube.hdr',
+            dataUrl: 'https://example.com/cube.img',
+            headers: {
+                Authorization: 'Bearer token',
+            },
+        })).toEqual({
+            kind: LoadSourceKind.ENVI_HTTP,
+            headerUrl: 'https://example.com/cube.hdr',
+            dataUrl: 'https://example.com/cube.img',
+            headers: {
+                Authorization: 'Bearer token',
+            },
+        });
+    });
+
     it('rejects unsupported load source kinds', () => {
         const headerFile = createFile('cube.hdr', 'ENVI');
         const dataFile = createFile('cube.img', new Uint8Array([1]));
 
         expect(() => normalizeLoadSource({
-            kind: 'envi-http',
+            kind: 'unknown-source',
             headerFile,
             dataFile,
         })).toThrow('Unsupported load source kind');

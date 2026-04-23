@@ -4,7 +4,14 @@ export type EnviLocalLoadSource = {
   dataFile: File;
 };
 
-export type ViewerLoadSource = EnviLocalLoadSource;
+export type EnviHttpLoadSource = {
+  kind: 'envi-http';
+  headerUrl: string;
+  dataUrl: string;
+  headers?: Record<string, string>;
+};
+
+export type ViewerLoadSource = EnviLocalLoadSource | EnviHttpLoadSource;
 
 export type ViewerBands = {
   r: number;
@@ -16,6 +23,8 @@ export type ViewerRuntimeConfig = {
   backgroundStats?: boolean;
   tilePreloading?: boolean;
 };
+
+export type RendererPreference = 'auto' | 'webgpu' | 'webgl';
 
 export type CubeDataType =
   | 'u8'
@@ -39,11 +48,28 @@ export type CubeBandMetadata = {
   displayRole?: CubeBandDisplayRole;
 };
 
+export type CubeCoordinate = {
+  x: number;
+  y: number;
+};
+
+export type CubeMapInfo = {
+  projectionName?: string;
+  referencePixel: CubeCoordinate;
+  referenceCoordinate: CubeCoordinate;
+  pixelSize: CubeCoordinate;
+  zone?: number;
+  hemisphere?: 'North' | 'South';
+  datum?: string;
+  units?: string;
+  rawTokens?: string[];
+};
+
 export type CubeSpatialReference = {
   affineTransform?: [number, number, number, number, number, number];
   epsg?: number;
   coordinateSystemString?: string;
-  mapInfo?: string | string[] | Record<string, unknown>;
+  mapInfo?: CubeMapInfo;
 };
 
 export type CubeHeader = {
@@ -70,6 +96,7 @@ export type ViewerOptions = {
   wasmWasmUrl?: string;
   enableBackgroundStats?: boolean;
   enableTilePreloading?: boolean;
+  rendererPreference?: RendererPreference;
 };
 
 export type ViewerPerformanceMetric = {
@@ -115,6 +142,8 @@ export declare class CubeViewer {
   updateConfig(config?: ViewerRuntimeConfig): void;
   getHeader(): CubeHeader | null;
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>;
+  pixelToWorld(x: number, y: number): CubeCoordinate | null;
+  worldToPixel(x: number, y: number): CubeCoordinate | null;
   destroy(): void;
 }
 

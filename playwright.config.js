@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
+const webServerPort = process.env.CUBESCOPE_WEBSERVER_PORT ?? '4173';
+const baseURL = process.env.CUBESCOPE_BASE_URL ?? `http://127.0.0.1:${webServerPort}`;
+
 export default defineConfig({
     testDir: './tests/smoke',
     fullyParallel: false,
@@ -8,7 +11,7 @@ export default defineConfig({
     workers: 1,
     reporter: [['list']],
     use: {
-        baseURL: 'http://127.0.0.1:4173',
+        baseURL,
         browserName: 'chromium',
         headless: true,
         screenshot: 'only-on-failure',
@@ -22,8 +25,8 @@ export default defineConfig({
         },
     },
     webServer: {
-        command: 'npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
-        url: 'http://127.0.0.1:4173/examples/',
+        command: `npm run dev -- --host 127.0.0.1 --port ${webServerPort} --strictPort`,
+        url: `${baseURL}/examples/`,
         reuseExistingServer: true,
         timeout: 120_000,
     },

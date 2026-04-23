@@ -75,6 +75,10 @@ try {
     ensureFile(resolve(installedRoot, 'dist/worker.js'));
     ensureFile(resolve(installedRoot, 'dist/pkg/envi_parser.js'));
     ensureFile(resolve(installedRoot, 'dist/pkg/envi_parser_bg.wasm'));
+    ensureFile(resolve(installedRoot, 'dist/fixtures/cubescope-mini-cube.hdr'));
+    ensureFile(resolve(installedRoot, 'dist/fixtures/cubescope-mini-cube.img'));
+    ensureFile(resolve(installedRoot, 'dist/fixtures/cubescope-mini-cube.json'));
+    ensureFile(resolve(installedRoot, 'dist/samples/remote-samples.json'));
     ensureFile(resolve(installedRoot, 'CITATION.cff'));
 
     const verifyScript = `
@@ -117,6 +121,10 @@ try {
                 'dist/worker.js',
                 'dist/pkg/envi_parser.js',
                 'dist/pkg/envi_parser_bg.wasm',
+                'dist/fixtures/cubescope-mini-cube.hdr',
+                'dist/fixtures/cubescope-mini-cube.img',
+                'dist/fixtures/cubescope-mini-cube.json',
+                'dist/samples/remote-samples.json',
                 'CITATION.cff',
             ],
         },

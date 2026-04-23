@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "catalogId": "cubescope-alpha-remote-samples",
+  "description": "Remote ENVI samples used by the CubeScope alpha demo and validation scripts.",
+  "samples": [
+    {
+      "id": "repo-local-http",
+      "title": "Repo Local HTTP Fixture",
+      "kind": "envi-http",
+      "availability": "deterministic-local",
+      "validationTier": "local",
+      "description": "Synthetic ENVI fixture mirrored into /public so the demo, smoke tests, and benchmark can exercise HTTP range loading without any external dependency.",
+      "headerUrl": "/fixtures/cubescope-mini-cube.hdr",
+      "dataUrl": "/fixtures/cubescope-mini-cube.img",
+      "license": "MIT"
+    }
+  ]
+}

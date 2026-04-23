@@ -24,17 +24,27 @@ type ViewerOptions = {
   wasmWasmUrl?: string
   enableBackgroundStats?: boolean
   enableTilePreloading?: boolean
+  rendererPreference?: RendererPreference
 }
 ```
 
 ## Core Surface
 
 ```ts
-type LoadSource = {
+type EnviLocalLoadSource = {
   kind: 'envi-local'
   headerFile: File
   dataFile: File
 }
+
+type EnviHttpLoadSource = {
+  kind: 'envi-http'
+  headerUrl: string
+  dataUrl: string
+  headers?: Record<string, string>
+}
+
+type LoadSource = EnviLocalLoadSource | EnviHttpLoadSource
 
 type RGBBands = {
   r: number
@@ -46,6 +56,8 @@ type RuntimeConfig = {
   backgroundStats?: boolean
   tilePreloading?: boolean
 }
+
+type RendererPreference = 'auto' | 'webgpu' | 'webgl'
 
 type CubeDataType =
   | 'u8'
@@ -69,11 +81,28 @@ type CubeBandMetadata = {
   displayRole?: CubeBandDisplayRole
 }
 
+type CubeCoordinate = {
+  x: number
+  y: number
+}
+
+type CubeMapInfo = {
+  projectionName?: string
+  referencePixel: CubeCoordinate
+  referenceCoordinate: CubeCoordinate
+  pixelSize: CubeCoordinate
+  zone?: number
+  hemisphere?: 'North' | 'South'
+  datum?: string
+  units?: string
+  rawTokens?: string[]
+}
+
 type CubeSpatialReference = {
   affineTransform?: [number, number, number, number, number, number]
   epsg?: number
   coordinateSystemString?: string
-  mapInfo?: string | string[] | Record<string, unknown>
+  mapInfo?: CubeMapInfo
 }
 
 type CubeHeader = {
@@ -105,6 +134,8 @@ interface CubeViewer {
   setBands(bands: RGBBands): void
   updateConfig(next: RuntimeConfig): void
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>
+  pixelToWorld(x: number, y: number): CubeCoordinate | null
+  worldToPixel(x: number, y: number): CubeCoordinate | null
 
   on(eventName: ViewerEventName, handler: ViewerEventHandler): void
   off(eventName: ViewerEventName, handler: ViewerEventHandler): void
@@ -124,15 +155,21 @@ Current alpha guarantees for ENVI loads:
 2. `dataType` and `byteOrder` are normalized into canonical lower-case tags
    (for example `f32`, `u16`, `lsb`, `msb`) from the Rust/WASM parser output
 3. `wavelength` is present only when the source header contains it
-4. `bandMetadata` and `spatialReference` are reserved additive fields for the
-   normalization path and may currently be absent
+4. `spatialReference` is populated when ENVI metadata includes `map info`,
+   `coordinate system string`, or explicit affine metadata
+5. ENVI `map info` is normalized into a structured `CubeMapInfo`, and
+   `affineTransform` is derived from that metadata on the JS side
+6. `bandMetadata` remains an additive field and may currently be absent
 
 Compatibility note:
 
-1. `load({ kind: 'envi-local', headerFile, dataFile })` is the primary API
-2. `loadFile(hdrFile, dataFile)` remains supported throughout the `0.x` series
+1. `load({ kind: 'envi-local', headerFile, dataFile })` remains the primary
+   zero-install local workflow
+2. `load({ kind: 'envi-http', headerUrl, dataUrl, headers? })` now supports
+   HTTP range-backed remote ENVI loading through the same viewer contract
+3. `loadFile(hdrFile, dataFile)` remains supported throughout the `0.x` series
    as a convenience alias
-3. no removal of `loadFile(...)` will happen before `1.0.0`, and any future
+4. no removal of `loadFile(...)` will happen before `1.0.0`, and any future
    deprecation must be documented at least one minor release in advance
 
 ## Stable Event Set
@@ -171,6 +208,8 @@ Recommended payload patterns:
 - `performance` -> `{ name: 'timeToInitialView' | 'bandSwitchTime', value, unit }`
 - `error` -> `string`
 - `image-clicked` -> `{ x, y }`
+- `pixelToWorld(...)` / `worldToPixel(...)` -> zero-based image pixel space
+  mapped through the source affine transform when available
 - `metadata` -> source/file metadata summary
 - `statechange` -> `{ loading, message? }`
 - `log` -> `string`
@@ -210,8 +249,8 @@ The alpha implementation is expected to honor these rules:
 
 The alpha does not expose:
 
-1. HTTP range data sources
-2. analysis-core or plugin APIs
-3. layer management APIs
-4. renderer-private resources
-5. raw worker pools or cache maps
+1. analysis-core or plugin APIs
+2. layer management APIs
+3. renderer-private resources
+4. raw worker pools or cache maps
+5. real-time CRS reprojection or proj4-style coordinate transforms

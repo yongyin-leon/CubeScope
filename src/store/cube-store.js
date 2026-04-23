@@ -2,19 +2,28 @@
  * @fileoverview Minimal cube-store state holder for source-scoped runtime state.
  */
 
+import {
+    pixelToWorld as mapPixelToWorld,
+    worldToPixel as mapWorldToPixel,
+} from '../spatial/coordinate-mapper.js';
+import { serializeDataSource } from '../sources/data-source.js';
+
 export class CubeStore {
     #sourceId;
     #header;
     #headerBytes;
     #headerSource;
     #dataSource;
+    #dataSourceDescriptor;
 
-    constructor({ sourceId, header, headerBytes, headerSource, dataSource }) {
+    constructor({ sourceId, header, headerBytes, headerSource, dataSource, dataSourceDescriptor }) {
         this.#sourceId = sourceId;
         this.#header = header ?? null;
         this.#headerBytes = headerBytes ?? null;
         this.#headerSource = headerSource ?? null;
         this.#dataSource = dataSource ?? null;
+        this.#dataSourceDescriptor = dataSourceDescriptor
+            ?? (dataSource ? serializeDataSource(dataSource) : null);
     }
 
     getSourceId() {
@@ -37,8 +46,22 @@ export class CubeStore {
         return this.#dataSource;
     }
 
+    getDataSourceDescriptor() {
+        return this.#dataSourceDescriptor;
+    }
+
     getImageFile() {
-        return this.#dataSource?.source ?? null;
+        return this.#dataSource?.kind === 'blob'
+            ? this.#dataSource.source ?? null
+            : null;
+    }
+
+    pixelToWorld(x, y) {
+        return mapPixelToWorld(this.#header, x, y);
+    }
+
+    worldToPixel(x, y) {
+        return mapWorldToPixel(this.#header, x, y);
     }
 
     unload() {
@@ -46,5 +69,6 @@ export class CubeStore {
         this.#headerBytes = null;
         this.#headerSource = null;
         this.#dataSource = null;
+        this.#dataSourceDescriptor = null;
     }
 }

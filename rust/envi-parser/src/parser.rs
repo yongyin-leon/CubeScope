@@ -79,6 +79,8 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
     let description = processed_fields.remove("description");
     let file_type = processed_fields.remove("file type");
     let sensor_type = processed_fields.remove("sensor type");
+    let map_info = processed_fields.remove("map info");
+    let coordinate_system_string = processed_fields.remove("coordinate system string");
 
     let wavelength = processed_fields.remove("wavelength").and_then(|s| {
         s.split(',')
@@ -101,8 +103,59 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
         description,
         file_type,
         sensor_type,
+        map_info,
+        coordinate_system_string,
         wavelength,
         custom_fields,
         bytes_per_pixel,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_header_str;
+
+    #[test]
+    fn parses_map_info_into_first_class_header_field() {
+        let header = parse_header_str(
+            "ENVI
+samples = 4
+lines = 3
+bands = 2
+data type = 12
+interleave = bsq
+byte order = 0
+map info = {UTM, 1, 1, 500000, 4100000, 30, 30, 50, North, WGS-84, units=Meters}
+"
+        ).expect("map info should parse");
+
+        assert_eq!(
+            header.map_info.as_deref(),
+            Some("UTM, 1, 1, 500000, 4100000, 30, 30, 50, North, WGS-84, units=Meters")
+        );
+        assert!(!header.custom_fields.contains_key("map info"));
+    }
+
+    #[test]
+    fn parses_multiline_coordinate_system_string() {
+        let header = parse_header_str(
+            "ENVI
+samples = 4
+lines = 3
+bands = 2
+data type = 12
+interleave = bsq
+byte order = 0
+coordinate system string = {PROJCS[\"WGS 84 / UTM zone 50N\",
+GEOGCS[\"WGS 84\"],
+UNIT[\"Meter\",1.0]}
+"
+        ).expect("coordinate system string should parse");
+
+        assert_eq!(
+            header.coordinate_system_string.as_deref(),
+            Some("PROJCS[\"WGS 84 / UTM zone 50N\", GEOGCS[\"WGS 84\"], UNIT[\"Meter\",1.0]")
+        );
+        assert!(!header.custom_fields.contains_key("coordinate system string"));
+    }
 }

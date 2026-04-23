@@ -107,6 +107,19 @@ Renderer input contract:
 4. The renderer must be disposable at the source boundary without leaving live
    GPU resources behind.
 
+### Spatial Metadata Boundary
+
+CubeScope now treats geospatial support as a metadata-and-mapping concern first.
+
+1. format adapters parse raw spatial fields such as ENVI `map info` and
+   `coordinate system string`
+2. metadata normalization derives a stable `spatialReference` object plus an
+   affine transform when enough information exists
+3. `CubeStore` and the public viewer may expose `pixelToWorld(...)` and
+   `worldToPixel(...)` based on that affine transform
+4. the renderer stays in pixel space and does not own CRS reprojection,
+   geodetic transforms, or world-space raster warping
+
 ### 5. Tool System
 
 Tools control user interaction, not dataset structure.
@@ -155,8 +168,8 @@ interface CubeStore {
   getTile(request: TileReadRequest): Promise<TileChunk>
   getSpectrum(request: SpectrumReadRequest): Promise<Float32Array | null>
   unload(): Promise<void>
-  pixelToWorld?(x: number, y: number): [number, number] | null
-  worldToPixel?(x: number, y: number): [number, number] | null
+  pixelToWorld?(x: number, y: number): { x: number; y: number } | null
+  worldToPixel?(x: number, y: number): { x: number; y: number } | null
 }
 
 type RendererInput = {
@@ -184,15 +197,41 @@ Current concrete floor in source:
 - `src/store/cube-store.js`
 - `src/rendering/renderer-contract.js`
 - `src/rendering/webgpu-renderer.js`
+- `src/rendering/webgl-renderer.js`
+- `src/rendering/auto-renderer.js`
+- `src/runtime/render-session.js`
+- `src/runtime/work-scheduler.js`
+- `src/runtime/worker-message-router.js`
+- `src/runtime/worker-dispatch-policy.js`
+- `src/runtime/worker-pool.js`
 
 Current alpha runtime adoption:
 
 1. `src/runtime/viewer-runtime.js` now crosses the load path through
    `DataSource -> FormatAdapter -> CubeStore`
 2. `src/runtime/viewer-runtime.js` now delegates draw calls and GPU tile
-   resource ownership to `src/rendering/webgpu-renderer.js`
-3. renderer input is frozen as an internal contract helper before deeper
+   resource ownership to renderer implementations behind
+   `src/rendering/auto-renderer.js`
+3. viewport state, render-slot state, and transition-slot commits are now
+   isolated in `src/runtime/render-session.js`, so `viewer-runtime` no longer
+   owns those details inline
+4. worker idle-pool state plus tile/stats/preload queue bookkeeping now flow
+   through `src/runtime/work-scheduler.js`, reducing how much source-scoped
+   scheduling state remains inline inside `viewer-runtime`
+5. worker envelope normalization and response classification now flow through
+   `src/runtime/worker-message-router.js`, so `viewer-runtime` mainly handles
+   the stateful side effects rather than inline message decoding
+6. outgoing worker request ids, envelope construction, and command payload
+   shaping now flow through `src/runtime/worker-dispatch-policy.js`, so
+   `viewer-runtime` no longer assembles each worker message inline
+7. worker creation, init handshake, fatal-error wiring, broadcast, and
+   termination now flow through `src/runtime/worker-pool.js`, so
+   `viewer-runtime` no longer owns the raw worker lifecycle inline
+8. renderer input is frozen as an internal contract helper before deeper
    renderer/store separation work in the next phase
+9. ENVI `map info` and `coordinate system string` now normalize into a stable
+   `spatialReference` contract, with affine pixel/world mapping exposed without
+   entering renderer reprojection
 
 ## Analysis Architecture
 

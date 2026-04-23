@@ -4,7 +4,7 @@
 
 /**
  * @typedef {{
- *   headerSource?: import('../sources/data-source.js').createBlobDataSource,
+ *   headerSource?: Record<string, unknown>,
  *   headerBytes?: Uint8Array | ArrayBuffer,
  * }} HeaderParseInput
  */

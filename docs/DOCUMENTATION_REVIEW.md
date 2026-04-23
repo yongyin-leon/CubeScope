@@ -33,8 +33,8 @@ candidate:
 - the public browser SDK boundary is defined
 - local reproducibility is in place
 - the software-paper gate is locally close, but not externally closed until
-  GitHub Actions on Node 22 is confirmed, external embedding is verified, and
-  the first public tag is created
+  GitHub Actions on Node 22 is confirmed, one public remote sample is fixed,
+  and the first public tag is created
 
 This means the documentation should optimize for truthfulness and execution
 discipline rather than ambitious breadth.
@@ -182,7 +182,7 @@ The docs correctly note that local alpha verification has passed. The remaining
 gap is not conceptual but procedural:
 
 - GitHub Actions on Node 22 still needs confirmation
-- install-from-another-app verification is still pending
+- a stable public remote sample beyond the repo-local fixture is still pending
 
 Next documentation target:
 

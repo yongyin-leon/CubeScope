@@ -15,6 +15,8 @@ class InternalViewerMock {
         this.setBands = vi.fn();
         this.updateConfig = vi.fn();
         this.getSpectralProfile = vi.fn(async () => new Float32Array([1, 2, 3]));
+        this.pixelToWorld = vi.fn((x, y) => ({ x: 500000 + x * 30, y: 4100000 - y * 30 }));
+        this.worldToPixel = vi.fn((x, y) => ({ x: (x - 500000) / 30, y: (4100000 - y) / 30 }));
         this.destroy = vi.fn();
         viewerInstances.push(this);
     }
@@ -82,6 +84,30 @@ describe('CubeViewer public wrapper', () => {
         });
     });
 
+    it('forwards envi-http loads through the public wrapper', async () => {
+        const container = document.createElement('div');
+        const viewer = new DefaultCubeViewer(container);
+        const internal = viewerInstances.at(-1);
+
+        await viewer.load({
+            kind: 'envi-http',
+            headerUrl: 'https://example.com/cube.hdr',
+            dataUrl: 'https://example.com/cube.img',
+            headers: {
+                Authorization: 'Bearer token',
+            },
+        });
+
+        expect(internal.load).toHaveBeenCalledWith({
+            kind: 'envi-http',
+            headerUrl: 'https://example.com/cube.hdr',
+            dataUrl: 'https://example.com/cube.img',
+            headers: {
+                Authorization: 'Bearer token',
+            },
+        });
+    });
+
     it('resolves default runtime asset urls relative to the module', () => {
         const container = document.createElement('div');
         new DefaultCubeViewer(container);
@@ -140,6 +166,31 @@ describe('CubeViewer public wrapper', () => {
 
         expect(internal.unload).toHaveBeenCalledTimes(1);
         expect(viewer.getHeader()).toBeNull();
+    });
+
+    it('exposes pixel/world mapping helpers through the public wrapper', () => {
+        const container = document.createElement('div');
+        const viewer = new CubeViewer(container);
+        const internal = viewerInstances.at(-1);
+        internal.emit('headerloaded', {
+            bands: 32,
+            spatialReference: {
+                affineTransform: [500000, 30, 0, 4100000, 0, -30],
+            },
+        });
+
+        expect(viewer.pixelToWorld(2, 3)).toEqual({ x: 500060, y: 4099910 });
+        expect(viewer.worldToPixel(500060, 4099910)).toEqual({ x: 2, y: 3 });
+        expect(internal.pixelToWorld).toHaveBeenCalledWith(2, 3);
+        expect(internal.worldToPixel).toHaveBeenCalledWith(500060, 4099910);
+    });
+
+    it('returns null for coordinate mapping before a header is loaded', () => {
+        const container = document.createElement('div');
+        const viewer = new CubeViewer(container);
+
+        expect(viewer.pixelToWorld(0, 0)).toBeNull();
+        expect(viewer.worldToPixel(0, 0)).toBeNull();
     });
 
     it('keeps EnviViewer as a compatibility export alias', () => {

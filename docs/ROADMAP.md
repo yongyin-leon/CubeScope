@@ -15,14 +15,17 @@ a private `0.1.0-alpha.1` local release-candidate state:
 - Phase 1 is largely complete at the public-contract level
 - Phase 2 has started, with packaging, test, and benchmark infrastructure in
   place
-- the remaining release blockers are GitHub Actions verification on Node 22 and
-  consumer-app embedding verification before tagging and opening the repository
+- local consumer-app embedding verification is now complete through the tarball
+  install/import gate
+- external GitHub Actions verification on Node 22 is deferred for now and
+  remains a later public-release gate rather than an active local blocker
 
 What this means in practice:
 
 1. the project is already software-paper-oriented and locally reproducible
-2. the project is not yet beta, because fallback renderer work, HTTP range
-   loading, and deeper internal extractions are still pending
+2. the project is not yet beta, because public remote validation beyond the
+   repo-local fixture, Node 22 target-runtime confirmation, and deeper internal
+   extractions are still pending
 3. the project is not yet in Phase 3 analysis work, even though spectral probe
    functionality already exists
 
@@ -79,16 +82,18 @@ instead of delaying it.
    - target phase: Phase 2
    - expected paper value: strengthens the software-paper story as reusable
      remote-sensing software rather than hyperspectral-only tooling
-3. `HTTP range` support for ENVI through the `DataSource` abstraction
-   - reason: this most directly upgrades CubeScope from local demo utility to
-     serious cloud-adjacent research software
+3. harden the remote ENVI path after the first `HTTP range` landing
+   - reason: the capability now exists, so the next value comes from public
+     sample documentation, benchmark stability, and clearer release gating
    - target phase: Phase 2
    - expected paper value: strengthens both the software paper and later
      systems baselines
-4. georeferencing and spatial metadata normalization
-   - reason: this is a more urgent scientific-software gap than many flashy
-     analysis features
-   - target phase: late Phase 2
+4. geospatial follow-on after the affine-mapping slice
+   - reason: initial ENVI spatial metadata normalization and pixel/world
+     mapping now exist, so the next geospatial work should focus on overlays,
+     richer sources, and later CRS conversion without disturbing renderer
+     boundaries
+   - target phase: late Phase 2 onward
    - expected paper value: improves credibility as remote-sensing software
 5. provenance and export metadata
    - reason: publication-grade software needs reproducible outputs, not only
@@ -192,6 +197,21 @@ instead of delaying it.
 - completed: source-scoped metadata/stats cache ownership is codified in
   `src/runtime/source-cache.js`, and renderer-owned render-tile caches now
   enforce byte/tile budgets with explicit GPU disposal and device-loss recovery
+- completed: viewport state, transition-slot state, and render-slot promotion
+  now flow through `src/runtime/render-session.js`, reducing how much
+  orchestration detail lives inline inside `src/runtime/viewer-runtime.js`
+- completed: worker idle-pool state plus tile/stats/preload queue bookkeeping
+  now flow through `src/runtime/work-scheduler.js`, reducing another layer of
+  source-scoped orchestration detail in `src/runtime/viewer-runtime.js`
+- completed: worker envelope normalization and response classification now flow
+  through `src/runtime/worker-message-router.js`, reducing how much protocol
+  decoding logic still lives inline inside `src/runtime/viewer-runtime.js`
+- completed: outgoing worker request ids, envelopes, and payload shaping now
+  flow through `src/runtime/worker-dispatch-policy.js`, reducing how much
+  dispatch construction logic still lives inline inside `src/runtime/viewer-runtime.js`
+- completed: raw worker lifecycle management now flows through
+  `src/runtime/worker-pool.js`, reducing how much init, broadcast, and
+  termination logic still lives inline inside `src/runtime/viewer-runtime.js`
 - completed: `CubeHeader` normalization now flows through
   `src/formats/cube-header.js`, fixing `interleave`, `dataType`, and
   `byteOrder` into a stable public metadata contract
@@ -227,10 +247,32 @@ instead of delaying it.
 - completed: `dist/` is no longer treated as source-of-truth material
 - completed: Rust/WASM rebuilds are scriptable from source and copied into the published runtime asset layout
 - completed: Node 22, npm, Rust/WASM, Playwright, and benchmark commands are documented for reproducibility
-- completed: GitHub Actions workflow exists for Node 22 + Rust/WASM + Playwright
-- pending: install-from-another-app verification of the packaged SDK
-- pending: WebGL fallback renderer
-- pending: HTTP range source
+- deferred: GitHub Actions confirmation on Node 22 remains outside the current private alpha window
+- completed: ENVI spatial metadata now normalizes into a stable
+  `spatialReference` contract, and the public viewer exposes affine
+  `pixelToWorld(...)` / `worldToPixel(...)` helpers without introducing
+  reprojection into the renderer
+- completed: install-from-another-app verification of the packaged SDK now
+  passes through `npm run verify:pack`
+- completed: the source-based API now supports remote ENVI loading through
+  `load({ kind: 'envi-http', headerUrl, dataUrl, headers? })`, and workers now
+  consume serializable `DataSource` descriptors instead of assuming raw `File`
+  objects
+- completed: the repo now ships a deterministic same-origin HTTP fixture path
+  through `public/fixtures/`, and benchmark/smoke automation can exercise both
+  local and `envi-http` flows without an external dependency
+- completed: a registered remote-sample catalog now lives under
+  `public/samples/remote-samples.json`, and local validation can exercise that
+  catalog through a dedicated command and demo auto-load path
+- completed: the repo now includes a candidate-qualification command for future
+  public remote samples, so external hosts can be screened for range and CORS
+  before they are added to the shipped catalog
+- completed: a WebGL compatibility renderer now exists behind the renderer
+  seam, and local smoke / benchmark verification can force that path for
+  deterministic browser validation
+- pending: one stable public remote sample beyond the repo-local HTTP fixture
+- pending: broader browser-matrix hardening for the auto renderer, especially
+  around unstable headless WebGPU recovery paths
 
 ### Exit criteria
 
@@ -318,23 +360,24 @@ instead of delaying it.
 ### `0.1.0-alpha.1` (current private alpha candidate)
 
 - single `@cubescope/web` SDK identity
-- source-based local ENVI loading
+- source-based ENVI loading for `envi-local` and `envi-http`
+- ENVI spatial metadata normalization plus affine pixel/world mapping
 - typed worker protocol and contract tests
 - reproducible local build, smoke, and benchmark path
 - citation, contribution, issue, and release-checklist shell
 
 ### `0.2.0-alpha`
 
-- explicit install-from-another-app verification
-- GitHub Actions confirmation on Node 22
 - first public tag and repository opening
+- one stable public remote sample beyond the repo-local deterministic fixture
 - stronger internal split between viewer core and renderer/store responsibilities
+- Node 22 confirmation on a matching runtime
+- optional external CI once the repository is ready for that gate
 
 ### `0.3.0-beta`
 
-- fallback renderer
 - broader browser compatibility story
-- optional HTTP range source
+- auto-renderer hardening across the browser / GPU matrix
 
 ### `0.4.0-beta`
 
@@ -393,22 +436,34 @@ The current repository already contains the seed of the eventual platform:
 Current strengths:
 
 - local ENVI viewing path already exists
+- remote ENVI viewing through deterministic same-origin `HTTP range` now exists
 - BIP / BIL / BSQ are already handled
 - heavy work is offloaded to workers
 - WebGPU rendering path already exists
+- WebGL compatibility rendering now exists through the renderer seam
 - pixel spectral probing is already possible
+- ENVI spatial metadata and affine pixel/world mapping are already possible
 - basic performance instrumentation already exists
 - typed worker envelopes and source-based load entry already exist
 - reproducible fixture generation, smoke testing, and benchmark commands now exist
+- isolated tarball consumer verification now exists
 - package metadata, citation metadata, issue templates, and contribution docs are in place
 
 Current liabilities:
 
-- renderer, scheduler, cache, and interaction logic are tightly coupled
-- `DataSource`, `FormatAdapter`, `CubeStore`, and `Renderer` are documented seams, not yet first-class modules
-- install-from-another-app verification has not yet been demonstrated
-- WebGL fallback and HTTP range loading are not implemented
-- GitHub Actions on Node 22 still needs to be confirmed before the first public alpha tag
+- scheduler, cache, and interaction logic still overlap more than they should
+- the internal seam floor now exists, and render-session extraction has
+  reduced viewer-runtime pressure, and work-scheduler extraction has reduced
+  queue-state pressure, and worker-message-router extraction has reduced
+  protocol branching pressure, and worker-dispatch-policy extraction has
+  reduced request-construction pressure, and worker-pool extraction has
+  reduced lifecycle pressure, but runtime-level policy and state reactions
+  still own too much orchestration detail
+- one stable public remote sample beyond the repo-local HTTP fixture is not yet documented
+- the auto renderer still needs broader browser-matrix hardening, especially
+  for WebGPU recovery in unstable headless environments
+- Node 22 on a matching local runtime still needs to be confirmed before the
+  first public alpha tag
 
 ## Strategic Thesis
 
@@ -645,7 +700,8 @@ Must have:
 
 Current status:
 
-- locally satisfied except for the external CI confirmation and public tag/repo switch
+- locally satisfied; the remaining future public-release gates are external CI
+  confirmation and the eventual public tag/repo switch
 
 ### Gate 2: systems-paper-ready release
 

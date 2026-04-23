@@ -8,6 +8,10 @@
 
 import { ViewerRuntime } from './runtime/viewer-runtime.js';
 import { LoadSourceKind, normalizeLoadSource } from './sources/load-source.js';
+import {
+    pixelToWorld as mapPixelToWorld,
+    worldToPixel as mapWorldToPixel,
+} from './spatial/coordinate-mapper.js';
 
 function isPackagedModuleUrl(moduleUrl) {
     return /\/dist\/[^/]+$/.test(moduleUrl) || moduleUrl.endsWith('/cubescope.es.js');
@@ -99,7 +103,8 @@ class CubeViewer extends EventEmitter {
                 distPath: './worker.js',
             }),
             enableBackgroundStats: this.#options.enableBackgroundStats ?? true,
-            enableTilePreloading: this.#options.enableTilePreloading ?? true
+            enableTilePreloading: this.#options.enableTilePreloading ?? true,
+            rendererPreference: this.#options.rendererPreference ?? 'auto',
         });
 
         this.#attachInternalListeners();
@@ -144,7 +149,16 @@ class CubeViewer extends EventEmitter {
     /**
      * EN: Loads an ENVI source through the stable source-based API.
      * ZH: 通过稳定的 source API 加载 ENVI 数据源。
-     * @param {{kind: 'envi-local', headerFile: File, dataFile: File}} source The load source definition.
+     * @param {{
+     *   kind: 'envi-local',
+     *   headerFile: File,
+     *   dataFile: File
+     * } | {
+     *   kind: 'envi-http',
+     *   headerUrl: string,
+     *   dataUrl: string,
+     *   headers?: Record<string, string>
+     * }} source The load source definition.
      * @returns {Promise<void>}
      */
     async load(source) {
@@ -213,6 +227,38 @@ class CubeViewer extends EventEmitter {
      */
     getSpectralProfile(x, y) {
         return this.#internalViewer.getSpectralProfile(x, y);
+    }
+
+    /**
+     * EN: Maps a zero-based image pixel coordinate into source world coordinates when affine metadata exists.
+     * ZH: 当存在仿射空间元数据时，将零基影像像素坐标映射为源数据世界坐标。
+     * @param {number} x The zero-based image x coordinate.
+     * @param {number} y The zero-based image y coordinate.
+     * @returns {{x: number, y: number} | null} The mapped world coordinate, or null when unavailable.
+     */
+    pixelToWorld(x, y) {
+        if (!this.#header) {
+            return null;
+        }
+
+        return this.#internalViewer.pixelToWorld?.(x, y)
+            ?? mapPixelToWorld(this.#header, x, y);
+    }
+
+    /**
+     * EN: Maps a world coordinate back into zero-based image pixel space when affine metadata exists.
+     * ZH: 当存在仿射空间元数据时，将世界坐标反向映射回零基影像像素空间。
+     * @param {number} x The world x coordinate.
+     * @param {number} y The world y coordinate.
+     * @returns {{x: number, y: number} | null} The mapped pixel coordinate, or null when unavailable.
+     */
+    worldToPixel(x, y) {
+        if (!this.#header) {
+            return null;
+        }
+
+        return this.#internalViewer.worldToPixel?.(x, y)
+            ?? mapWorldToPixel(this.#header, x, y);
     }
 
     /**

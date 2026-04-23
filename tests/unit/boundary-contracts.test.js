@@ -4,7 +4,7 @@ import { isCubeHeader, normalizeCubeHeader } from '../../src/formats/cube-header
 import { createEnviFormatAdapter } from '../../src/formats/envi-format-adapter.js';
 import { createRendererInput, isRendererInput } from '../../src/rendering/renderer-contract.js';
 import { createBlobDataSource, isDataSource } from '../../src/sources/data-source.js';
-import { createLocalEnviLoadSource, LoadSourceKind } from '../../src/sources/load-source.js';
+import { createEnviLoadSource, createLocalEnviLoadSource, LoadSourceKind } from '../../src/sources/load-source.js';
 import { CubeStore } from '../../src/store/cube-store.js';
 
 function createFile(name, content) {
@@ -39,6 +39,26 @@ describe('minimal runtime boundary contracts', () => {
         expect(isDataSource(loadSource.dataSource)).toBe(true);
     });
 
+    it('attaches HTTP range-backed data sources to the canonical envi-http load source', () => {
+        const loadSource = createEnviLoadSource({
+            kind: LoadSourceKind.ENVI_HTTP,
+            headerUrl: 'https://example.com/cube.hdr',
+            dataUrl: 'https://example.com/cube.img',
+            headers: {
+                Authorization: 'Bearer token',
+            },
+        });
+
+        expect(loadSource.kind).toBe(LoadSourceKind.ENVI_HTTP);
+        expect(loadSource.headerSource.kind).toBe('http-range');
+        expect(loadSource.dataSource.kind).toBe('http-range');
+        expect(loadSource.headerSource.name).toBe('cube.hdr');
+        expect(loadSource.dataSource.name).toBe('cube.img');
+        expect(loadSource.dataSource.headers).toEqual({
+            Authorization: 'Bearer token',
+        });
+    });
+
     it('normalizes ENVI headers through the internal format adapter', async () => {
         const adapter = createEnviFormatAdapter({
             getWasmModule: async () => ({
@@ -57,6 +77,8 @@ describe('minimal runtime boundary contracts', () => {
                             byteOrder: 'Lsb',
                             headerOffset: 0,
                             bytesPerPixel: 4,
+                            mapInfo: 'UTM, 1, 1, 500000, 4100000, 30, 30, 50, North, WGS-84, units=Meters',
+                            coordinateSystemString: 'PROJCS["WGS 84 / UTM zone 50N"]',
                             wavelength: [450.5, 550.25],
                         };
                     }
@@ -75,6 +97,22 @@ describe('minimal runtime boundary contracts', () => {
         expect(header.dataType).toBe('f32');
         expect(header.byteOrder).toBe('lsb');
         expect(header.wavelength).toEqual([450.5, 550.25]);
+        expect(header.spatialReference).toEqual({
+            affineTransform: [500000, 30, 0, 4100000, 0, -30],
+            epsg: undefined,
+            coordinateSystemString: 'PROJCS["WGS 84 / UTM zone 50N"]',
+            mapInfo: {
+                projectionName: 'UTM',
+                referencePixel: { x: 1, y: 1 },
+                referenceCoordinate: { x: 500000, y: 4100000 },
+                pixelSize: { x: 30, y: 30 },
+                zone: 50,
+                hemisphere: 'North',
+                datum: 'WGS-84',
+                units: 'Meters',
+                rawTokens: ['UTM', '1', '1', '500000', '4100000', '30', '30', '50', 'North', 'WGS-84', 'units=Meters'],
+            },
+        });
         expect(Object.isFrozen(header)).toBe(true);
     });
 
@@ -128,7 +166,15 @@ describe('minimal runtime boundary contracts', () => {
         const dataFile = createFile('cube.img', new Uint8Array([1, 2, 3]));
         const headerSource = createBlobDataSource(headerFile, { id: 'header:1' });
         const dataSource = createBlobDataSource(dataFile, { id: 'data:1' });
-        const header = { samples: 2, lines: 2, bands: 3, interleave: 'bil' };
+        const header = {
+            samples: 2,
+            lines: 2,
+            bands: 3,
+            interleave: 'bil',
+            spatialReference: {
+                affineTransform: [500000, 30, 0, 4100000, 0, -30],
+            },
+        };
         const headerBytes = new Uint8Array([69, 78, 86, 73]);
         const store = new CubeStore({
             sourceId: 7,
@@ -144,6 +190,8 @@ describe('minimal runtime boundary contracts', () => {
         expect(store.getHeaderSource()).toBe(headerSource);
         expect(store.getDataSource()).toBe(dataSource);
         expect(store.getImageFile()).toBe(dataFile);
+        expect(store.pixelToWorld(1, 1)).toEqual({ x: 500030, y: 4099970 });
+        expect(store.worldToPixel(500030, 4099970)).toEqual({ x: 1, y: 1 });
 
         store.unload();
 
@@ -152,6 +200,7 @@ describe('minimal runtime boundary contracts', () => {
         expect(store.getHeaderSource()).toBeNull();
         expect(store.getDataSource()).toBeNull();
         expect(store.getImageFile()).toBeNull();
+        expect(store.pixelToWorld(0, 0)).toBeNull();
     });
 
     it('freezes a minimal renderer input contract', () => {
