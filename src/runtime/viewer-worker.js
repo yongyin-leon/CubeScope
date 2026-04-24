@@ -16,6 +16,7 @@ import {
 } from '../protocol/worker-protocol.js';
 import { createDataSourceFromDescriptor } from '../sources/data-source.js';
 import { createWorkerCancelRegistry } from './worker-cancel-registry.js';
+import { buildDeterministicSampleTiles } from './tile-sampling.js';
 
 // EN: Wasm functions that will be loaded dynamically.
 // ZH: 将被动态加载的 Wasm 函数。
@@ -467,9 +468,9 @@ async function getBipTileChunk(dataSource, header, tileX, tileY) {
 
 /**
  * EN: Calculates approximate global statistics (min/max) for a set of bands by sampling
- *     a few random tiles instead of processing the entire file. This is a performance optimization.
+ *     a small deterministic tile set instead of processing the entire file. This is a performance optimization.
  *     For BIP files, it reads a chunk containing all bands at once to minimize disk I/O.
- * ZH: 通过对几个随机瓦片进行采样来计算一组波段的近似全局统计数据（最小值/最大值），而不是处理整个文件。
+ * ZH: 通过对少量确定性瓦片进行采样来计算一组波段的近似全局统计数据（最小值/最大值），而不是处理整个文件。
  *     这是一种性能优化。对于 BIP 文件，它会一次性读取包含所有波段的数据块，以最小化磁盘 I/O。
  * @returns {Promise<Object>} A promise that resolves to an object containing the statistics for each band.
  */
@@ -485,10 +486,14 @@ async function calculateGlobalStats(enviReader, dataSource, bands, header, isIni
     // ZH: 为每个需要的波段初始化一个样本收集器。
     const bandSamples = new Map(bands.map(b => [b, []]));
 
+    const sampleTiles = buildDeterministicSampleTiles(header, {
+        tileSize: TILE_SIZE,
+        sampleCount: sample_count,
+    });
     const samplePromises = [];
-    for (let i = 0; i < sample_count; i++) {
-        const randTileX = Math.floor(Math.random() * (header.samples / TILE_SIZE));
-        const randTileY = Math.floor(Math.random() * (header.lines / TILE_SIZE));
+    for (const sampleTile of sampleTiles) {
+        const sampleTileX = sampleTile.x;
+        const sampleTileY = sampleTile.y;
 
         samplePromises.push((async () => {
             try {
@@ -497,7 +502,7 @@ async function calculateGlobalStats(enviReader, dataSource, bands, header, isIni
                 if (interleave === 'bip') {
                     // 1. EN: Read the raw data block containing all bands (one disk read).
                     //    ZH: 读取包含所有波段的原始数据块（一次磁盘读取）。
-                    const chunkInfo = await getBipTileChunk(dataSource, header, randTileX, randTileY);
+                    const chunkInfo = await getBipTileChunk(dataSource, header, sampleTileX, sampleTileY);
                     if (!chunkInfo) return;
                     
                     // 2. EN: Call Wasm to extract all required band samples at once.
@@ -506,8 +511,8 @@ async function calculateGlobalStats(enviReader, dataSource, bands, header, isIni
                         chunkInfo.chunkData, 
                         chunkInfo.chunkStartOffset,
                         bands, // Pass JS array directly
-                        randTileX, 
-                        randTileY, 
+                        sampleTileX,
+                        sampleTileY,
                         TILE_SIZE, 
                         TILE_SIZE
                     );
@@ -528,8 +533,8 @@ async function calculateGlobalStats(enviReader, dataSource, bands, header, isIni
                     await Promise.all(bands.map(async (band) => {
                         let tile_data;
                         const bandIndex = band - 1;
-                        if (interleave === 'bil') tile_data = await getBilTileForBand_Optimized(enviReader, dataSource, header, bandIndex, randTileX, randTileY);
-                        else if (interleave === 'bsq') tile_data = await getBsqTileForBand(enviReader, dataSource, header, bandIndex, randTileX, randTileY);
+                        if (interleave === 'bil') tile_data = await getBilTileForBand_Optimized(enviReader, dataSource, header, bandIndex, sampleTileX, sampleTileY);
+                        else if (interleave === 'bsq') tile_data = await getBsqTileForBand(enviReader, dataSource, header, bandIndex, sampleTileX, sampleTileY);
                         
                         if (tile_data && tile_data.length > 0) {
                             bandSamples.get(band).push(tile_data);

@@ -109,6 +109,9 @@ npm run verify:alpha
   change.
 - The synthetic ENVI fixture under `test-data/fixtures/` is deterministic and
   can be regenerated with `npm run fixtures:generate`.
+- Runtime statistics sampling uses deterministic tile selection, so repeated
+  smoke, benchmark, and screenshot visual outputs do not depend on random tile
+  choices.
 - That fixture now includes ENVI `map info` and `coordinate system string`
   fields so local validation covers the spatial-reference normalization path.
 - The same fixture is mirrored into `public/fixtures/`, which gives the local

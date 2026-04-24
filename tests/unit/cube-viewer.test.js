@@ -108,6 +108,25 @@ describe('CubeViewer public wrapper', () => {
         });
     });
 
+    it('propagates internal init and load failures through returned promises', async () => {
+        const container = document.createElement('div');
+        const viewer = new DefaultCubeViewer(container);
+        const internal = viewerInstances.at(-1);
+        const initError = new Error('init failed');
+        const loadError = new Error('load failed');
+        const headerFile = createFile('cube.hdr', 'ENVI');
+        const dataFile = createFile('cube.img', new Uint8Array([1, 2, 3]));
+
+        internal.init.mockRejectedValueOnce(initError);
+        internal.load.mockRejectedValueOnce(loadError);
+        internal.emit('headerloaded', { bands: 3 });
+
+        expect(viewer.getHeader()).toEqual({ bands: 3 });
+        await expect(viewer.init()).rejects.toBe(initError);
+        await expect(viewer.load({ kind: 'envi-local', headerFile, dataFile })).rejects.toBe(loadError);
+        expect(viewer.getHeader()).toBeNull();
+    });
+
     it('resolves default runtime asset urls relative to the module', () => {
         const container = document.createElement('div');
         new DefaultCubeViewer(container);

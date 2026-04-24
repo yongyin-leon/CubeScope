@@ -178,6 +178,7 @@ const viewer = new CubeViewer(container, options);
 - `wasmWasmUrl?: string`
 - `enableBackgroundStats?: boolean`
 - `enableTilePreloading?: boolean`
+- `rendererPreference?: 'auto' | 'webgpu' | 'webgl'`
 
 ### 方法
 
@@ -192,6 +193,11 @@ const viewer = new CubeViewer(container, options);
 - `pixelToWorld(x, y): { x, y } | null`
 - `worldToPixel(x, y): { x, y } | null`
 - `destroy(): void`
+
+`init()` 和 `load(source)` 会在早期初始化或数据源加载失败时 reject，同时继续发出
+`error` 事件。波段选择会按已加载 header 的 `bands` 范围校验；当首选
+`30/20/10` 默认组合不适合低波段数据源时，CubeScope 会自动选择安全的范围内
+fallback。
 
 当 ENVI 头信息包含 `map info` 或 `coordinate system string` 时，`getHeader()`
 返回的 `spatialReference` 会带有结构化 `mapInfo` 和推导出的
@@ -470,6 +476,7 @@ const viewer = new CubeViewer(container, options);
 - `wasmWasmUrl?: string`
 - `enableBackgroundStats?: boolean`
 - `enableTilePreloading?: boolean`
+- `rendererPreference?: 'auto' | 'webgpu' | 'webgl'`
 
 ### Methods
 
@@ -484,6 +491,11 @@ const viewer = new CubeViewer(container, options);
 - `pixelToWorld(x, y): { x, y } | null`
 - `worldToPixel(x, y): { x, y } | null`
 - `destroy(): void`
+
+`init()` and `load(source)` reject early initialization or source-load failures
+while also emitting `error`. Band selections are validated against the loaded
+header; when the preferred `30/20/10` default does not fit a lower-band source,
+CubeScope chooses a safe in-range fallback automatically.
 
 When the ENVI header includes `map info` or `coordinate system string`,
 `getHeader()` may expose a normalized `spatialReference` with structured

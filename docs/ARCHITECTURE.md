@@ -182,7 +182,7 @@ type RendererInput = {
 interface Renderer {
   render(input: RendererInput): Promise<void>
   disposeSource(sourceId: string): Promise<void>
-  destroy(): Promise<void>
+  destroy(): void | Promise<void>
 }
 ```
 

@@ -166,7 +166,12 @@ class CubeViewer extends EventEmitter {
      */
     async load(source) {
         const normalizedSource = normalizeLoadSource(source);
-        await this.#internalViewer.load(normalizedSource);
+        try {
+            await this.#internalViewer.load(normalizedSource);
+        } catch (error) {
+            this.#header = null;
+            throw error;
+        }
     }
 
     /**

@@ -42,6 +42,12 @@ import {
     SourceMapCache,
     SourceValueCache,
 } from './source-cache.js';
+import {
+    DEFAULT_RGB_BANDS,
+    ensureBandsForHeader,
+    normalizeViewerBands,
+    uniqueBands,
+} from './band-selection.js';
 import { createEnviLoadSource } from '../sources/load-source.js';
 import { serializeDataSource } from '../sources/data-source.js';
 import { CubeStore } from '../store/cube-store.js';
@@ -70,7 +76,7 @@ export class ViewerRuntime extends EventEmitter {
     #renderer = null;
     #renderSession = new RenderSession();
     #globalStats = null;
-    #currentBands = { r: 30, g: 20, b: 10 };
+    #currentBands = DEFAULT_RGB_BANDS;
     #metadataCache = new SourceValueCache(DEFAULT_METADATA_CACHE_POLICY);
     #statsCache = new SourceMapCache(DEFAULT_STATS_CACHE_POLICY);
     #lifecycle;
@@ -254,6 +260,7 @@ export class ViewerRuntime extends EventEmitter {
             const errorMessage = `Initialization failed: ${error.message}`;
             this.emit('error', errorMessage);
             console.error(error);
+            throw error;
         }
     }
     /**
@@ -274,7 +281,7 @@ export class ViewerRuntime extends EventEmitter {
             loadSource = createEnviLoadSource(source, legacyDataFile);
         } catch (error) {
             this.emit('error', error.message);
-            return;
+            throw error;
         }
 
         const { headerSource, dataSource } = loadSource;
@@ -295,6 +302,12 @@ export class ViewerRuntime extends EventEmitter {
             });
             this.emit('headerloaded', this.#header);
             this.emit('log', `HDR 解析成功。 格式(Interleave): ${this.#header.interleave}`);
+            const bandResolution = ensureBandsForHeader(this.#currentBands, this.#header);
+            if (bandResolution.changed) {
+                this.#currentBands = bandResolution.bands;
+                this.emit('bandschanged', this.#currentBands);
+                this.emit('log', `已为 ${this.#header.bands} 个波段的数据源选择安全默认波段: R:${this.#currentBands.r}, G:${this.#currentBands.g}, B:${this.#currentBands.b}。`);
+            }
 
             const metadataSummary = await this.#lifecycle.createMetadataSummary({
                 dataSource,
@@ -315,12 +328,21 @@ export class ViewerRuntime extends EventEmitter {
             });
             this.emit('log', "正在为初始视图计算统计值...");
             this.emit('statechange', { loading: true, message: '计算统计值...' });
-            const initialBands = [this.#currentBands.r, this.#currentBands.g, this.#currentBands.b];
-            this.#dispatchStatsCalculation(initialBands.filter(b => !this.#hasBandStats(b)), true);
+            const initialBands = uniqueBands([this.#currentBands.r, this.#currentBands.g, this.#currentBands.b])
+                .filter(b => !this.#hasBandStats(b));
+            const dispatchResult = this.#dispatchStatsCalculation(initialBands, true);
+            if (dispatchResult.errored) {
+                throw new Error('Initial statistics task could not be dispatched.');
+            }
         } catch (err) {
             this.emit('error', `文件加载或解析失败: ${err.message}`);
             this.emit('loadend');
             this.emit('statechange', { loading: false });
+            this.#resetSourceState({
+                canceledSourceId: this.#activeSourceId,
+                cancelReason: 'load-failed',
+            });
+            throw err;
         }
     }
 
@@ -336,13 +358,20 @@ export class ViewerRuntime extends EventEmitter {
         this.#statsCache.set(this.#activeSourceId, band, stats);
     }
 
-    setBands({ r, g, b }) {
+    setBands(bands) {
         if (this.#renderSession.isTransitioning() || !this.#header) return;
+        let requestedBands;
+        try {
+            requestedBands = normalizeViewerBands(bands, this.#header);
+        } catch (error) {
+            this.emit('error', error.message);
+            throw error;
+        }
         const transitionPlan = this.#transitionController.planBandSelectionChange({
             currentBands: this.#currentBands,
-            requestedBands: { r, g, b },
+            requestedBands,
             resolveBandStatsPlan: ({ bands }) => this.#runtimePolicy.resolveBandStatsPlan({
-                bands,
+                bands: uniqueBands(bands),
                 hasBandStats: (band) => this.#hasBandStats(band),
                 getBandStats: (band) => this.#getBandStats(band),
             }),
@@ -352,7 +381,7 @@ export class ViewerRuntime extends EventEmitter {
         this.emit('bandschanged', this.#currentBands);
         this.#runtimePolicy.beginBandSwitch();
         console.log('[PERF-LOG] 计时器启动: Band Switch Time');
-        this.emit('log', `波段组合已更改为 R:${r}, G:${g}, B:${b}。`);
+        this.emit('log', `波段组合已更改为 R:${requestedBands.r}, G:${requestedBands.g}, B:${requestedBands.b}。`);
         const plan = transitionPlan.plan;
         if (plan.ready) {
             this.emit('log', "从缓存加载统计值，开始平滑过渡...");

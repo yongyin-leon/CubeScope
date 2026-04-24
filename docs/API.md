@@ -133,7 +133,7 @@ interface CubeViewer {
   load(source: LoadSource): Promise<void>
   loadFile(hdrFile: File, dataFile: File): Promise<void>
   unload(): Promise<void>
-  destroy(): Promise<void>
+  destroy(): void
 
   getHeader(): CubeHeader | null
   setBands(bands: RGBBands): void
@@ -176,6 +176,23 @@ Compatibility note:
    as a convenience alias
 4. no removal of `loadFile(...)` will happen before `1.0.0`, and any future
    deprecation must be documented at least one minor release in advance
+
+## Failure And Band Semantics
+
+`init()` rejects when the WASM runtime, renderer, or worker pool cannot be
+initialized. `load(source)` rejects for invalid sources, source read failures,
+header parse failures, and failures to dispatch the initial statistics task.
+Both methods still emit the stable `error` event for event-driven integrations.
+
+After a header is parsed, the active RGB band selection is validated against
+`header.bands`. CubeScope keeps the preferred `{ r: 30, g: 20, b: 10 }`
+selection when it fits the source. For lower-band sources, it automatically
+chooses a safe high/mid/low fallback such as `{ r: 16, g: 8, b: 1 }` for a
+16-band cube, `{ r: 3, g: 2, b: 1 }` for RGB-like data, and repeated valid
+bands for one- or two-band data.
+
+`setBands({ r, g, b })` accepts integer band numbers in the inclusive range
+`1..header.bands`. Invalid values emit `error` and throw synchronously.
 
 ## Stable Event Set
 
@@ -239,7 +256,8 @@ defined in `docs/ARCHITECTURE.md`.
 
 The alpha implementation is expected to honor these rules:
 
-1. `load(source)` starts a new source-scoped cache domain
+1. `load(source)` starts a new source-scoped cache domain and rejects early
+   load failures while also emitting `error`
 2. `unload()` clears source-scoped caches, broadcasts cancellation for tracked
    worker requests belonging to the active source, and releases renderer-owned
    GPU resources
