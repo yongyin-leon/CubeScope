@@ -22,7 +22,7 @@ Important guide points used here:
 ## 1. Preferred manuscript base
 
 - Current base manuscript: `docs/SOFTWAREX_MANUSCRIPT_v4.md`
-- Current approximate word count: `1953`
+- Current approximate word count before references: `2805`
 - Article type: `Original software publication`
 
 ## 2. Title-page fields to paste into the template
@@ -37,7 +37,7 @@ Important guide points used here:
 
 ### Author list
 
-`[To be completed in final order used in the submission system]`
+`Yongyin Leon Li`
 
 ### Affiliations
 
@@ -85,9 +85,12 @@ and explicit runtime packaging for worker and WebAssembly assets. To support
 reuse and evaluation, the repository also provides deterministic test fixtures,
 public sample validation, benchmark commands, browser smoke tests, packaging
 checks, and release-gating reports anchored to a reproducible Node 22
-toolchain. CubeScope is intentionally scoped as an embeddable viewer kernel
-rather than a full analysis platform, allowing downstream web applications to
-integrate hyperspectral browsing without adopting a heavyweight backend stack.
+toolchain. Additional local validation on six real ENVI datasets, ranging from
+`17.6 MB` to `381.1 MB`, produced successful initial views in all repeated
+browser-load trials, with five runs per dataset. CubeScope is intentionally
+scoped as an embeddable viewer kernel rather than a full analysis platform,
+allowing downstream web applications to integrate hyperspectral browsing
+without adopting a heavyweight backend stack.
 
 ### Keywords
 
@@ -103,6 +106,7 @@ official template. It already contains:
 - Software description
 - Illustrative examples
 - Early evaluation
+- Local real-ENVI validation table and montage figure
 - Impact and limitations
 - Conclusions
 - Data statement
@@ -112,17 +116,57 @@ official template. It already contains:
 - Conflict-of-interest statement
 - Generative-AI disclosure placeholder
 - Acknowledgements placeholder
-- References placeholder
+- Candidate references
 
-## 5. Repository and release metadata to finalize
+## 5. Manuscript figure assets
+
+### Architecture figure
+
+Current figure file:
+
+- `docs/figures/softwarex-architecture.png`
+
+Source figure file:
+
+- `docs/figures/softwarex-architecture.svg`
+
+Generation script:
+
+- `scripts/build-softwarex-architecture-figure.mjs`
+
+Suggested caption:
+
+`CubeScope architecture. Local and HTTP-range ENVI sources are reduced to byte
+access, interpreted through the Rust/WebAssembly ENVI parser, exposed through
+normalized cube services, orchestrated by the viewer runtime and worker layer,
+and rendered through WebGPU or WebGL behind the public CubeViewer API.`
+
+### Real ENVI montage
+
+Current figure file:
+
+- `docs/figures/softwarex-real-envi-initial-views.png`
+
+Generation script:
+
+- `scripts/build-softwarex-real-envi-montage.mjs`
+
+Suggested caption:
+
+`Real ENVI initial views rendered by CubeScope for six local validation cases.
+The panels are generated from browser screenshots of the example application.
+Source datasets are used only for manuscript-side validation and are not
+redistributed with the software package.`
+
+## 6. Repository and release metadata to finalize
 
 ### Public GitHub repository URL
 
-`[To be inserted before submission]`
+`https://github.com/yongyin-leon/CubeScope`
 
 ### Release/tag for the manuscript
 
-`0.1.0-alpha.1` or later public tagged release
+`0.1.0-alpha.1`
 
 ### License
 
@@ -136,16 +180,20 @@ official template. It already contains:
 
 `[DOI or release landing page if available]`
 
-## 6. Data statement
+## 7. Data statement
 
 No new experimental datasets were generated for this software paper. The
 repository includes deterministic validation fixtures, benchmark outputs,
 browser-matrix reports, sample-validation reports, and packaging-verification
-artifacts as part of the software release and reproducibility workflow. If
-additional submission-system wording is required, this section should be aligned
-with the final public repository and release archive.
+artifacts as part of the software release and reproducibility workflow. Local
+real ENVI datasets were used to prepare illustrative screenshots and timing
+summaries for the manuscript, but those source data files are excluded from Git
+and are not redistributed with the software package. If additional
+submission-system wording is required, this section should be aligned with the
+final public repository, release archive, and the licensing terms of any
+externally obtained datasets.
 
-## 7. Declarations and policy-sensitive text
+## 8. Declarations and policy-sensitive text
 
 ### Funding
 
@@ -165,7 +213,7 @@ in this paper.
 
 `[Include only if needed. Suggested pattern: During the preparation of this work the author(s) used [NAME OF TOOL / SERVICE] in order to [REASON]. After using this tool/service, the author(s) reviewed and edited the content as needed and take(s) full responsibility for the content of the published article.]`
 
-## 8. Optional submission extras
+## 9. Optional submission extras
 
 ### Highlights
 
@@ -187,7 +235,7 @@ Current status:
 - recommended but not yet produced
 - current concept documented in `docs/SOFTWAREX_SUBMISSION_PACKAGE_v1.md`
 
-## 9. Final blanks that still need real author input
+## 10. Final blanks that still need real author input
 
 - final author order
 - all affiliation details

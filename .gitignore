@@ -7,4 +7,7 @@ output/
 playwright-report/
 test-results/
 
+# Local real hyperspectral datasets used for manuscript screenshots.
+test-data/高光谱数据集/
+
 rust/**/target/

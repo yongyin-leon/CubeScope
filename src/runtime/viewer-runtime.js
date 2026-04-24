@@ -44,8 +44,8 @@ import {
 } from './source-cache.js';
 import {
     DEFAULT_RGB_BANDS,
-    ensureBandsForHeader,
     normalizeViewerBands,
+    selectDefaultBandsForHeader,
     uniqueBands,
 } from './band-selection.js';
 import { createEnviLoadSource } from '../sources/load-source.js';
@@ -302,12 +302,17 @@ export class ViewerRuntime extends EventEmitter {
             });
             this.emit('headerloaded', this.#header);
             this.emit('log', `HDR 解析成功。 格式(Interleave): ${this.#header.interleave}`);
-            const bandResolution = ensureBandsForHeader(this.#currentBands, this.#header);
-            if (bandResolution.changed) {
-                this.#currentBands = bandResolution.bands;
+            const defaultBands = selectDefaultBandsForHeader(this.#header);
+            const defaultBandsChanged = (
+                defaultBands.r !== this.#currentBands.r
+                || defaultBands.g !== this.#currentBands.g
+                || defaultBands.b !== this.#currentBands.b
+            );
+            this.#currentBands = defaultBands;
+            if (defaultBandsChanged) {
                 this.emit('bandschanged', this.#currentBands);
-                this.emit('log', `已为 ${this.#header.bands} 个波段的数据源选择安全默认波段: R:${this.#currentBands.r}, G:${this.#currentBands.g}, B:${this.#currentBands.b}。`);
             }
+            this.emit('log', `默认显示波段: R:${this.#currentBands.r}, G:${this.#currentBands.g}, B:${this.#currentBands.b}。`);
 
             const metadataSummary = await this.#lifecycle.createMetadataSummary({
                 dataSource,

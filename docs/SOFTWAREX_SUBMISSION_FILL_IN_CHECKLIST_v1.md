@@ -15,6 +15,8 @@ Official guide checked on `2026-04-23`:
 
 - [ ] Final short manuscript base confirmed as `docs/SOFTWAREX_MANUSCRIPT_v4.md`
 - [ ] Official journal template format chosen: `Word` or `LaTeX`
+- [ ] Official SoftwareX templates reviewed under `docs/softwarex-template/`
+- [ ] LaTeX draft reviewed if using `docs/softwarex-template/cubescope-softwarex-submission-draft.tex`
 - [ ] Final title confirmed
 - [ ] Short title confirmed
 - [ ] Abstract final copyedited
@@ -47,11 +49,13 @@ Official guide checked on `2026-04-23`:
 
 - [ ] Final public GitHub repository URL prepared
 - [ ] Public release/tag selected for submission
-- [ ] Release notes prepared
+- [x] Release notes prepared
+- [x] Local `npm run verify:alpha` gate passed
 - [ ] Data statement aligned with the public repository and release archive
 - [ ] Software availability section updated with repository URL
 - [ ] Software availability section updated with release identifier
 - [ ] Permanent identifier added if a DOI or archival record is available
+- [ ] Local real-ENVI screenshot permissions/provenance verified before using the montage figure in submission
 
 ## 5. Repository readiness
 
@@ -67,12 +71,15 @@ Official guide checked on `2026-04-23`:
 
 - [ ] Highlights retained for submission
 - [ ] Highlights file copyedited one final time
+- [ ] Real-ENVI montage figure retained and embedded if dataset permissions are confirmed
 - [ ] Decision made on graphical abstract
 - [ ] If yes, graphical abstract image exported in a journal-acceptable format
 
 ## 7. Final file set
 
 - [ ] Official-template manuscript
+- [ ] Completed metadata tables from the official template
+- [ ] Manuscript figure files, including `docs/figures/softwarex-real-envi-initial-views.png` if retained
 - [ ] Highlights file, if included
 - [ ] Graphical abstract, if included
 - [ ] Cover letter

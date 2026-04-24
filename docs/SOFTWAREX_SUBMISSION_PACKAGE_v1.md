@@ -47,6 +47,10 @@ The same official guide also clarifies that the `3000`-word limit excludes
 title, authors, affiliations, references, and metadata tables, but includes the
 abstract, running text, figure captions, and footnotes.
 
+The downloaded official LaTeX template still contains an internal note saying
+`4000` words, while the current web guide says `3000` words. For submission
+planning, CubeScope should follow the stricter current web-guide value.
+
 The guide also states that accepted SoftwareX software packages are archived in
 the journal's GitHub repository. For CubeScope, this means the repository must
 be public and well-formed by the time of actual submission.
@@ -119,7 +123,8 @@ Current word-count snapshot from the repository draft:
 - more submission-ready SoftwareX manuscript:
   `docs/SOFTWAREX_MANUSCRIPT_v3.md`, about `1770` words
 - more template-aware submission package manuscript:
-  `docs/SOFTWAREX_MANUSCRIPT_v4.md`, about `1953` words
+  `docs/SOFTWAREX_MANUSCRIPT_v4.md`, about `2805` words before references
+  after adding local real-ENVI validation evidence and candidate citations
 
 Interpretation:
 
@@ -154,7 +159,7 @@ item as `PASS`, `FAIL`, or `UNCLEAR` against the current repository state.
 
 | Requirement | Status | Current evidence | Action needed |
 | --- | --- | --- | --- |
-| Short descriptive manuscript within `3000` words | `PASS` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` is the current short-manuscript base and remains far below the limit | Keep the short manuscript as the submission base |
+| Short descriptive manuscript within `3000` words | `PASS` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` is the current short-manuscript base and remains below the limit | Keep the short manuscript as the submission base |
 | Abstract not exceeding `250` words | `PASS` | Abstract in `docs/SOFTWAREX_MANUSCRIPT_v4.md` is about `197` words | Final copyediting only |
 | `1-7` English keywords | `PASS` | Seven keywords are listed in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final wording review only |
 | Title page with authors, affiliations, corresponding author | `UNCLEAR` | Placeholder fields exist in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Fill in real author metadata before template conversion |
@@ -191,15 +196,32 @@ The package we should prepare for actual submission is:
 ### Already in good shape
 
 - manuscript core story
+- official SoftwareX Word and LaTeX templates downloaded under
+  `docs/softwarex-template/`
+- LaTeX submission draft prepared:
+  `docs/softwarex-template/cubescope-softwarex-submission-draft.tex`
 - submission-length manuscript draft
 - more template-aligned submission-length manuscript draft
 - more submission-ready submission-length manuscript draft
 - more template-aware submission-length manuscript draft
 - abstract under the current limit
 - architecture figures drafted
+- architecture figure generated:
+  `docs/figures/softwarex-architecture.png`
 - reproducibility evidence tables drafted
+- local alpha release gate passed and summarized:
+  `docs/SOFTWAREX_RELEASE_GATE_REPORT_v1.md`
+- release notes draft prepared:
+  `docs/SOFTWAREX_RELEASE_NOTES_0.1.0-alpha.1.md`
 - benchmark table drafted
+- local real-ENVI validation table and screenshot evidence drafted
+- local real-ENVI montage figure generated:
+  `docs/figures/softwarex-real-envi-initial-views.png`
 - citation metadata
+- claim/evidence audit drafted:
+  `docs/SOFTWAREX_CLAIM_EVIDENCE_AUDIT_v1.md`
+- reference and dataset-provenance working notes drafted:
+  `docs/SOFTWAREX_REFERENCE_PROVENANCE_v1.md`
 - license
 - public-sample validation evidence
 - Node 22 reproducibility baseline
@@ -208,6 +230,11 @@ The package we should prepare for actual submission is:
 ### Still needs work before submission
 
 - convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official SoftwareX template
+- review and complete the LaTeX submission draft in
+  `docs/softwarex-template/cubescope-softwarex-submission-draft.tex`
+- verify the candidate citations and unresolved dataset provenance entries
+  listed in `docs/SOFTWAREX_CLAIM_EVIDENCE_AUDIT_v1.md` and
+  `docs/SOFTWAREX_REFERENCE_PROVENANCE_v1.md`
 - decide whether to submit a graphical abstract, then produce the actual image if yes
 - prepare the final highlights file in submission-ready form if we keep highlights
 - prepare the final cover letter
@@ -225,11 +252,12 @@ The package we should prepare for actual submission is:
    [completed through `docs/SOFTWAREX_MANUSCRIPT_v3.md`]
 4. absorb additional guide-facing details such as the data statement and fuller title-page placeholders
    [completed through `docs/SOFTWAREX_MANUSCRIPT_v4.md`]
-5. convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official journal template
-6. finalize highlights and decide whether to submit a graphical abstract
-7. finalize cover letter and declarations
-8. publish the repository and release tag
-9. submit the manuscript with the public repository URL
+5. verify and insert the final citation/provenance set
+6. convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official journal template
+7. finalize highlights and decide whether to submit a graphical abstract
+8. finalize cover letter and declarations
+9. publish the repository and release tag
+10. submit the manuscript with the public repository URL
 
 ## Supporting Working Files
 
@@ -237,9 +265,20 @@ The most useful repository-side working files for actual submission preparation
 are now:
 
 - `docs/SOFTWAREX_MANUSCRIPT_v4.md` as the current short-manuscript base
+- `docs/softwarex-template/softwarex-osp-template.tex` and
+  `docs/softwarex-template/softwarex-osp-template.docx` as downloaded official templates
+- `docs/softwarex-template/cubescope-softwarex-submission-draft.tex` as the current LaTeX template draft
+- `docs/SOFTWAREX_CLAIM_EVIDENCE_AUDIT_v1.md` as the claim/evidence and missing-citation audit
+- `docs/SOFTWAREX_REFERENCE_PROVENANCE_v1.md` as the reference and dataset-provenance working file
+- `docs/figures/softwarex-architecture.png` as the current architecture figure draft
+- `docs/figures/softwarex-real-envi-initial-views.png` as the current real-ENVI montage figure draft
+- `scripts/build-softwarex-architecture-figure.mjs` as the architecture figure-generation script
+- `scripts/build-softwarex-real-envi-montage.mjs` as the reproducible figure-generation script
 - `docs/SOFTWAREX_TEMPLATE_INPUT_PACKET_v1.md` as the template-fill packet
 - `docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md` as the current cover-letter base
 - `docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md` as the final fill-in list
+- `docs/SOFTWAREX_RELEASE_GATE_REPORT_v1.md` as the latest local release-gate summary
+- `docs/SOFTWAREX_RELEASE_NOTES_0.1.0-alpha.1.md` as the release notes draft
 
 ## Honest Submission Posture
 

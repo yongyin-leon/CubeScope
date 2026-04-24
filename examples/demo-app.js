@@ -1,4 +1,5 @@
 import CubeViewer from '../src/cube-viewer.js';
+import { selectDefaultBandsForHeader } from '../src/runtime/band-selection.js';
 import {
     buildRemoteSampleLoadSource,
     fetchRemoteSampleCatalog,
@@ -58,6 +59,7 @@ const demoState = window.__cubescopeDemoState = {
     headerParseTime: null,
     loadEndAt: null,
     lastProbe: null,
+    bands: null,
 };
 
 // --- (EN) Logging Functions / (ZH) 日志函数 ---
@@ -220,8 +222,12 @@ async function main() {
     viewer.on('ready', () => {
         if (toggleChartBtn) { toggleChartBtn.disabled = false; toggleChartBtn.textContent = 'Show Performance Chart'; }
     });
-    viewer.on('bandschange', () => {
-        bandSwitchCount += 1;
+    viewer.on('bandschange', (bands) => {
+        demoState.bands = bands;
+        syncBandSelectors(bands);
+        if (demoState.loaded) {
+            bandSwitchCount += 1;
+        }
         if (bandSwitchCountSpan) bandSwitchCountSpan.textContent = `Band Switch Count: ${bandSwitchCount}`;
     });
     viewer.on('image-clicked', async ({ x, y }) => {
@@ -290,8 +296,9 @@ async function main() {
         demoState.headerParseTime = demoState.loadStartAt === null
             ? null
             : demoState.headerAt - demoState.loadStartAt;
-        populateBandSelectors(header.bands, { r: 30, g: 20, b: 10 });
-        viewer.setBands({ r: 30, g: 20, b: 10 });
+        const defaultBands = selectDefaultBandsForHeader(header);
+        demoState.bands = defaultBands;
+        populateBandSelectors(header.bands, defaultBands);
         enableControls();
     });
     viewer.on('metadata', (metadata) => {
@@ -467,6 +474,14 @@ function populateBandSelectors(bandCount, defaultBands) {
     rBandSelect.value = defaultBands.r;
     gBandSelect.value = defaultBands.g;
     bBandSelect.value = defaultBands.b;
+}
+
+function syncBandSelectors(bands) {
+    if (!bands || !rBandSelect || !gBandSelect || !bBandSelect) return;
+    if (rBandSelect.options.length === 0) return;
+    rBandSelect.value = bands.r;
+    gBandSelect.value = bands.g;
+    bBandSelect.value = bands.b;
 }
 
 function getRandomBands(maxBand) {

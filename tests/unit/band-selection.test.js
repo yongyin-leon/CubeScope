@@ -4,6 +4,7 @@ import {
     createDefaultBandsForHeader,
     ensureBandsForHeader,
     normalizeViewerBands,
+    selectDefaultBandsForHeader,
     uniqueBands,
 } from '../../src/runtime/band-selection.js';
 
@@ -47,6 +48,63 @@ describe('band-selection helpers', () => {
                 b: 1,
             },
             changed: true,
+        });
+    });
+
+    it('uses valid ENVI default bands before spectral heuristics', () => {
+        expect(selectDefaultBandsForHeader({
+            bands: 64,
+            wavelength: [450, 470, 550, 650],
+            customFields: { 'Default Bands': '{12, 8, 4}' },
+        })).toEqual({
+            r: 12,
+            g: 8,
+            b: 4,
+        });
+    });
+
+    it('ignores invalid ENVI default bands and keeps the hyperspectral fallback', () => {
+        expect(selectDefaultBandsForHeader({
+            bands: 64,
+            customFields: { 'default bands': '{80, 40, 20}' },
+        })).toEqual({
+            r: 30,
+            g: 20,
+            b: 10,
+        });
+    });
+
+    it('selects visible RGB bands from wavelength metadata', () => {
+        expect(selectDefaultBandsForHeader({
+            bands: 5,
+            wavelength: [450, 470, 550, 650, 800],
+        })).toEqual({
+            r: 4,
+            g: 3,
+            b: 2,
+        });
+    });
+
+    it('supports micrometer wavelength units', () => {
+        expect(selectDefaultBandsForHeader({
+            bands: 5,
+            wavelength: [0.45, 0.47, 0.55, 0.65, 0.8],
+            customFields: { 'wavelength units': 'Micrometers' },
+        })).toEqual({
+            r: 4,
+            g: 3,
+            b: 2,
+        });
+    });
+
+    it('spreads false-color defaults across non-visible wavelength ranges', () => {
+        expect(selectDefaultBandsForHeader({
+            bands: 5,
+            wavelength: [900, 1000, 1100, 1200, 1300],
+        })).toEqual({
+            r: 4,
+            g: 3,
+            b: 2,
         });
     });
 

@@ -53,7 +53,7 @@ Thank you for your consideration.
 
 Sincerely,
 
-`[Corresponding Author Name]`
+`Yongyin Leon Li`
 
 `[Affiliation]`
 

@@ -8,7 +8,7 @@ Full title: `CubeScope: a browser-native, local-first viewer kernel for ENVI hyp
 
 Short title: `CubeScope browser-native ENVI viewer kernel`
 
-Authors: `[To be completed in final order used in the submission system]`
+Authors: `Yongyin Leon Li`
 
 Affiliations: `[To be completed with full postal addresses and country names]`
 
@@ -40,9 +40,12 @@ and explicit runtime packaging for worker and WebAssembly assets. To support
 reuse and evaluation, the repository also provides deterministic test fixtures,
 public sample validation, benchmark commands, browser smoke tests, packaging
 checks, and release-gating reports anchored to a reproducible Node 22
-toolchain. CubeScope is intentionally scoped as an embeddable viewer kernel
-rather than a full analysis platform, allowing downstream web applications to
-integrate hyperspectral browsing without adopting a heavyweight backend stack.
+toolchain. Additional local validation on six real ENVI datasets, ranging from
+`17.6 MB` to `381.1 MB`, produced successful initial views in all repeated
+browser-load trials, with five runs per dataset. CubeScope is intentionally
+scoped as an embeddable viewer kernel rather than a full analysis platform,
+allowing downstream web applications to integrate hyperspectral browsing
+without adopting a heavyweight backend stack.
 
 ## Keywords
 
@@ -51,9 +54,12 @@ integrate hyperspectral browsing without adopting a heavyweight backend stack.
 
 ## 1. Motivation and significance
 
-Hyperspectral workflows are still dominated by desktop applications, notebook
-scripts, or server-oriented geospatial systems. These approaches remain useful,
-but they are often too heavy for one increasingly common task: quickly opening,
+Hyperspectral data are widely used across remote-sensing and imaging
+applications, but their high spectral dimensionality still creates practical
+inspection and interaction challenges [1,2]. In many applied workflows, access
+to hyperspectral cubes is mediated by desktop applications, notebook scripts,
+or server-oriented geospatial systems. These approaches remain useful, but they
+are often too heavy for one increasingly common task: quickly opening,
 inspecting, and embedding multi-band image cubes inside scientific web
 applications. Many research and engineering teams can preprocess ENVI data
 offline, yet still lack a reusable browser-side viewer that preserves format
@@ -70,7 +76,7 @@ viewing without immediately adopting a heavyweight backend stack.
 This positioning also distinguishes CubeScope from adjacent web-facing
 hyperspectral systems such as HSIToolbox, which targets the higher-level
 problem of server-side hyperspectral classification workflows with dataset
-management, labeling, remote training, and multi-user queueing. CubeScope is
+management, labeling, remote training, and multi-user queueing [3]. CubeScope is
 aimed at a different layer: a browser-native, local-first viewer kernel that
 can be embedded into downstream applications, including future systems that may
 add classification or analysis services above it.
@@ -82,10 +88,20 @@ add classification or analysis services above it.
 The public package is `@cubescope/web`, and the main public class is
 `CubeViewer`. The primary loading contract is `load(source)`, with two current
 source modes: `envi-local` for paired local files and `envi-http` for remote
-ENVI data served with browser-visible `CORS` and `HTTP range`. Within this
-scope, the alpha supports pseudo-RGB viewing, band switching, normalized header
-access, spectral probing, explicit unloading, and pixel/world coordinate
-mapping when ENVI spatial metadata is present.
+ENVI data served with browser-visible `CORS` and `HTTP range`. The ENVI support
+is anchored to the format's paired ASCII header and flat binary image model,
+including header fields such as interleave, wavelength, and default-band
+metadata [4,5]. Within this scope, the alpha supports pseudo-RGB viewing, band
+switching, normalized header access, spectral probing, explicit unloading, and
+pixel/world coordinate mapping when ENVI spatial metadata is present.
+
+The initial display band selection is intentionally conservative. CubeScope
+uses valid ENVI `default bands` metadata when available, otherwise it uses
+wavelength metadata to choose visible RGB-like bands when the spectrum covers
+the visible range, or a spread false-color triplet for non-visible spectral
+ranges. If neither metadata source is available, the runtime falls back to a
+safe bounded default. This prevents small-band datasets from requesting
+out-of-range bands while giving richer datasets a more informative first view.
 
 ### 2.2 Internal architecture
 
@@ -106,6 +122,13 @@ normalized metadata and cube-oriented services such as tile reads, spectrum
 reads, and pixel/world mapping. `Renderer` consumes prepared raster layers and
 view state and is explicitly separated from source parsing and format
 semantics.
+
+![CubeScope browser-native ENVI viewer architecture.](figures/softwarex-architecture.png)
+
+Figure 1. CubeScope architecture. Local and HTTP-range ENVI sources are reduced
+to byte access, interpreted through the Rust/WebAssembly ENVI parser, exposed
+through normalized cube services, orchestrated by the viewer runtime and worker
+layer, and rendered through WebGPU or WebGL behind the public `CubeViewer` API.
 
 ### 2.3 Implementation choices
 
@@ -175,6 +198,18 @@ pixel/world mappings through `pixelToWorld()` and `worldToPixel()`. This
 supports coordinate-aware inspection while keeping the render path anchored to
 source pixel space.
 
+For manuscript preparation, the example application was also exercised with
+six local real ENVI datasets, including agricultural, urban, wetland, airborne
+near-infrared, and UAV hyperspectral scenes. These cases are used as
+illustrative validation examples rather than redistributed test assets. The
+resulting screenshots show that the first rendered view is non-blank and
+visually interpretable across BIP and BSQ layouts, floating-point and unsigned
+integer data, and both metadata-poor and wavelength-described headers.
+Candidate provenance sources for these local validation cases include the
+Indian Pines/Purdue MultiSpec source [6], the EHU/GIC Pavia and KSC benchmark
+collection [7], Resonon Pika IR-L documentation for the near-infrared sensor
+family [8], and the WHU-Hi LongKou publication [9].
+
 ## 4. Early evaluation
 
 The current evaluation is a software-release check rather than a full systems
@@ -185,9 +220,9 @@ deterministic ENVI fixture with dimensions `48 x 48 x 32`.
 
 The benchmark harness records three early metrics: header parse time, time to
 initial view, and band-switch time. In the local-file scenario, the measured
-values are approximately `12.5 ms`, `23.2 ms`, and `7.6 ms`, respectively. In
+values are approximately `6.5 ms`, `17.1 ms`, and `3.0 ms`, respectively. In
 the same-origin remote scenario using `HTTP range`, the values are
-approximately `10.4 ms`, `36.7 ms`, and `31.1 ms`. These are reported as
+approximately `5.5 ms`, `21.3 ms`, and `5.5 ms`. These are reported as
 direct validation outputs, not as polished comparative benchmarks.
 
 The browser-matrix report adds evidence for renderer behavior. In the current
@@ -197,6 +232,41 @@ observed transition from `webgpu` to `webgl` after a device-loss event, with
 the session completing in a recovered state. This is not yet a broad browser or
 hardware comparison, but it does show that the compatibility path is exercised
 through an actual browser workflow.
+
+To complement the deterministic fixture, six real ENVI datasets were loaded
+through the example application using Chromium, `renderer=webgl`, and
+`benchmark=1`. Each case was run five times on the same local machine, and the
+table reports the median and interquartile range of time to initial view. All
+cases reached an initial rendered view in all five runs.
+
+Table 1. Local real ENVI validation cases. Initial-view time is reported as
+median (IQR) in milliseconds across five browser loads. Local source data were
+used only for manuscript-side validation and are not redistributed with the
+software package.
+
+| Dataset | Dimensions | Interleave | Type | Data size | Spatial metadata | Initial RGB bands | Successful runs | Initial view time |
+| --- | --- | --- | --- | --- | --- | --- | ---: | ---: |
+| Indian Pines | `145 x 145 x 220` | `bip` | `f32` | `17.6 MB` | no | `30/20/10` | `5/5` | `45.4 (7.1)` |
+| Pavia University | `340 x 610 x 103` | `bip` | `f32` | `81.5 MB` | no | `30/20/10` | `5/5` | `130.3 (4.4)` |
+| Pavia Centre | `715 x 1096 x 102` | `bip` | `f32` | `304.9 MB` | no | `30/20/10` | `5/5` | `399.0 (4.0)` |
+| Kennedy Space Center | `614 x 512 x 176` | `bip` | `f32` | `211.1 MB` | no | `30/20/10` | `5/5` | `389.7 (7.0)` |
+| Pika IR-L Hyalite Creek | `555 x 1500 x 240` | `bip` | `u16` | `381.1 MB` | yes | `180/121/61` | `5/5` | `458.5 (5.4)` |
+| WHU-Hi LongKou | `400 x 550 x 270` | `bsq` | `f32` | `226.6 MB` | no | `113/68/32` | `5/5` | `27.8 (21.0)` |
+
+![Real ENVI initial views rendered by CubeScope.](figures/softwarex-real-envi-initial-views.png)
+
+Figure 2. Real ENVI initial views rendered by CubeScope for the six local
+validation cases. The panels are generated from browser screenshots of the
+example application. Source datasets are used only for manuscript-side
+validation and are not redistributed with the software package.
+
+These results should be interpreted as practical evidence that the alpha
+runtime can open and render varied real ENVI cubes in a browser workflow, not
+as a hardware-independent performance claim. Several legacy benchmark datasets
+do not provide wavelength or default-band metadata, so their initial colors
+use CubeScope's safe pseudo-RGB fallback. The Pika and WHU-Hi cases include
+wavelength metadata, and therefore demonstrate the metadata-aware initial band
+selection path.
 
 ## 5. Impact and limitations
 
@@ -219,8 +289,11 @@ browser SDK, so users working only in Python or desktop environments still need
 an integration layer. The remote workflow depends on compatible `CORS` and
 `HTTP range` behavior at the serving endpoint. The benchmark scope is
 intentionally narrow and should not be mistaken for a full comparative systems
-study. The current alpha is also not yet a complete scientific analysis
-environment.
+study. The real-data validation cases were loaded from local files and are not
+redistributed with the repository, so their screenshot and timing evidence
+should be treated as manuscript-side validation rather than as a complete
+public benchmark suite. The current alpha is also not yet a complete
+scientific analysis environment.
 
 ## 6. Conclusions
 
@@ -231,7 +304,9 @@ viewer kernel built around a Rust/WebAssembly parser, worker-oriented runtime
 execution, and hardware-accelerated browser rendering with a validated fallback
 path. It pairs that runtime with fixtures, public-sample validation, packaging
 checks, benchmark commands, and release-gating reports that improve inspection,
-reuse, and citation potential.
+reuse, and citation potential. The additional real ENVI validation cases show
+that the same runtime path can produce initial views for selected
+agricultural, urban, wetland, airborne, and UAV hyperspectral scenes.
 
 Within its current scope, CubeScope already contributes a meaningful software
 base for downstream web applications that need hyperspectral viewing without a
@@ -244,15 +319,19 @@ later analysis-oriented extensions.
 No new experimental datasets were generated for this software paper. The
 repository includes deterministic validation fixtures, benchmark outputs,
 browser-matrix reports, sample-validation reports, and packaging-verification
-artifacts as part of the software release and reproducibility workflow. If
-additional submission-system wording is required, this section should be aligned
-with the final public repository and release archive.
+artifacts as part of the software release and reproducibility workflow. Local
+real ENVI datasets were used to prepare illustrative screenshots and timing
+summaries for the manuscript, but those source data files are excluded from Git
+and are not redistributed with the software package. If additional
+submission-system wording is required, this section should be aligned with the
+final public repository, release archive, and the licensing terms of any
+externally obtained datasets.
 
 ## Software availability
 
-Repository: `[Public GitHub repository URL to be inserted before submission]`
+Repository: `https://github.com/yongyin-leon/CubeScope`
 
-Version: `0.1.0-alpha.1` or later tagged release to be archived for submission
+Version: `0.1.0-alpha.1`
 
 License: `MIT`
 
@@ -284,4 +363,42 @@ in this paper. `[Revise if needed before submission.]`
 
 ## References
 
-`[To be completed. Include software/release references with creator, title, venue/repository, date, identifier, and version where applicable.]`
+1. Signoroni, A., Savardi, M., Baronio, A., & Benini, S. (2019). Deep
+   Learning Meets Hyperspectral Image Analysis: A Multidisciplinary Review.
+   `Journal of Imaging`, 5(5), 52. https://doi.org/10.3390/jimaging5050052
+
+2. Ghamisi, P., Yokoya, N., Li, J., Liao, W., Liu, S., Plaza, J., Rasti, B.,
+   & Plaza, A. (2017). Advances in hyperspectral image and signal processing:
+   A comprehensive overview of the state of the art. `IEEE Geoscience and
+   Remote Sensing Magazine`, 5(4), 37-78.
+   https://doi.org/10.1109/MGRS.2017.2762087
+
+3. Dhaene, Z., Zizakic, N., Huang, S., Li, X., & Pizurica, A. (2023).
+   HSIToolbox: A web-based application for the classification of hyperspectral
+   images. `SoftwareX`, 22, 101340.
+   https://doi.org/10.1016/j.softx.2023.101340
+
+4. NV5 Geospatial. ENVI Header Files. ENVI Documentation. Accessed
+   2026-04-24.
+   https://www.nv5geospatialsoftware.com/docs/enviheaderfiles.html
+
+5. NV5 Geospatial. ENVI Image Files. ENVI Documentation. Accessed 2026-04-24.
+   https://www.nv5geospatialsoftware.com/docs/ENVIImageFiles.html
+
+6. Purdue University MultiSpec. Hyperspectral Images. Indian Pine Test Site
+   AVIRIS data, Purdue University Research Repository DOI `10.4231/R7RX991C`.
+   Accessed 2026-04-24.
+   https://engineering.purdue.edu/~biehl/MultiSpec/hyperspectral.html
+
+7. Grupo de Inteligencia Computacional, University of the Basque Country.
+   Hyperspectral Remote Sensing Scenes. Accessed 2026-04-24.
+   https://www.ehu.eus/ccwintco/index.php?title=Hyperspectral_Remote_Sensing_Scenes
+
+8. Resonon. Pika IR-L (925-1700nm). Accessed 2026-04-24.
+   https://resonon.com/Pika-IR-L
+
+9. Zhong, Y., Hu, X., Luo, C., Wang, X., Zhao, J., & Zhang, L. (2020).
+   WHU-Hi: UAV-borne hyperspectral with high spatial resolution (H2) benchmark
+   datasets and classifier for precise crop identification based on deep
+   convolutional neural network with CRF. `Remote Sensing of Environment`,
+   250, 112012. https://doi.org/10.1016/j.rse.2020.112012

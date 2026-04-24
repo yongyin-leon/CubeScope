@@ -39,6 +39,10 @@
     "verify:pack": "node scripts/verify-pack-consumer.mjs",
     "verify:node22-local": "node scripts/verify-node22-local.mjs",
     "report:alpha": "node scripts/report-local-alpha.mjs",
+    "figure:softwarex-architecture": "node scripts/build-softwarex-architecture-figure.mjs",
+    "figure:softwarex-real-envi": "node scripts/build-softwarex-real-envi-montage.mjs",
+    "check:softwarex-submission": "node scripts/check-softwarex-submission.mjs",
+    "build:softwarex-pdf": "node scripts/build-softwarex-pdf.mjs",
     "verify:alpha": "npm run fixtures:generate && npm run build && npm run test && npm run report:toolchain && npm run report:browser-matrix && npm run benchmark && npm run validate:samples && npm run verify:pack && npm run report:alpha"
   },
   "keywords": [
