@@ -105,7 +105,7 @@ export class ViewerRuntimeTransitionController {
             const worker = takeIdleWorker();
             if (worker) {
                 const bandsPayload = [currentBands.r, currentBands.g, currentBands.b];
-                this.#debugLog(`[主线程-1-发送任务] (过渡) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
+                this.#debugLog(`[main-thread:transition-request] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
                 this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
                     sourceId,
                     hdrBytes,

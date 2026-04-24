@@ -86,7 +86,7 @@ export class ViewerRuntimeViewController {
             header,
             viewState: renderSession.getViewState(),
             tiles: visibleTiles,
-            clearMode: renderSession.isTransitioning() ? 'load' : 'clear',
+            clearMode: 'clear',
         }));
         if (renderResult.rendererReady === false) {
             return {

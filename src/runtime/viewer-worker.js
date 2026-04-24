@@ -75,11 +75,11 @@ self.onmessage = async (e) => {
                 requestId,
             }));
         } catch (err) {
-            console.error('[Worker] Fatal error during initialization / [Worker] 初始化过程中发生致命错误:', err);
+            console.error('[Worker] Fatal error during initialization:', err);
             self.postMessage(createWorkerError({
                 sourceId,
                 requestId,
-                message: `Worker WASM initialization failed / Worker WASM 初始化失败: ${err.message}. Stack: ${err.stack}`,
+                message: `Worker WASM initialization failed: ${err.message}. Stack: ${err.stack}`,
             }));
         }
         return;
@@ -98,7 +98,7 @@ self.onmessage = async (e) => {
         self.postMessage(createWorkerError({
             sourceId,
             requestId,
-            message: 'Worker is not yet initialized. / Worker 尚未初始化。',
+            message: 'Worker is not yet initialized.',
         }));
         return;
     }
@@ -310,7 +310,7 @@ async function loadAndRenderTile(enviReader, dataSource, tile, bands, globalStat
     const TILE_SIZE = 512;
     
     if (!bands || !Array.isArray(bands) || bands.length !== 3) {
-        console.error('[Worker-ERROR] Invalid bands parameter received in loadAndRenderTile! / loadAndRenderTile收到的bands参数无效!', bands);
+        console.error('[Worker-ERROR] Invalid bands parameter received in loadAndRenderTile.', bands);
         return null;
     }
 
@@ -337,7 +337,7 @@ async function loadAndRenderTile(enviReader, dataSource, tile, bands, globalStat
     ]);
 
     if (!tileR || tileR.length === 0 || !globalStats[rBand] || !globalStats[gBand] || !globalStats[bBand]) {
-        console.warn(`Tile (${x},${y}) is missing band data or statistics, skipping render. / 瓦片 (${x},${y}) 的波段数据或统计数据不完整，跳过渲染。`);
+        console.warn(`Tile (${x},${y}) is missing band data or statistics; skipping render.`);
         return null;
     }
     
@@ -542,7 +542,7 @@ async function calculateGlobalStats(enviReader, dataSource, bands, header, isIni
                     }));
                 }
             } catch (e) {
-                console.error(`[Worker-ERROR] Error during sampling / 采样时发生错误:`, e);
+                console.error('[Worker-ERROR] Error during sampling:', e);
             }
         })());
     }
@@ -564,12 +564,12 @@ async function calculateGlobalStats(enviReader, dataSource, bands, header, isIni
                     // ZH: 释放 Wasm 为统计对象分配的内存。
                     chunkStats.free();
                 } catch(e) {
-                    console.error("[Worker-ERROR] Error calculating statistics / 计算统计数据时出错:", e);
+                    console.error('[Worker-ERROR] Error calculating statistics:', e);
                 }
             }
             finalStats[band] = { min: globalMin, max: globalMax };
         } else {
-            console.warn(`[Worker-WARN] No valid data was collected for band ${band} to calculate statistics. / 波段 ${band} 未能采集到任何有效数据进行统计。`);
+            console.warn(`[Worker-WARN] No valid data was collected for band ${band} to calculate statistics.`);
             finalStats[band] = null;
         }
     }

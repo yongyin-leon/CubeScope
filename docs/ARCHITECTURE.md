@@ -120,6 +120,13 @@ CubeScope now treats geospatial support as a metadata-and-mapping concern first.
 4. the renderer stays in pixel space and does not own CRS reprojection,
    geodetic transforms, or world-space raster warping
 
+The affine mapper intentionally covers only source-space pixel/world
+relationships. It preserves projection descriptors such as `coordinate system
+string`, zone, hemisphere, datum, units, and raw `map info` tokens, but it does
+not infer EPSG codes, apply ENVI rotation tokens, or perform proj4-style CRS
+conversion. Those capabilities belong to a later geospatial layer above the
+current viewer kernel.
+
 ### 5. Tool System
 
 Tools control user interaction, not dataset structure.

@@ -206,6 +206,33 @@ export class RenderSession {
             return [];
         }
 
+        const bounds = this.getVisibleBounds({
+            header,
+            canvasWidth,
+            canvasHeight,
+        });
+        const maxTileX = Math.ceil(header.samples / this.#tileSize);
+        const maxTileY = Math.ceil(header.lines / this.#tileSize);
+        const startTileX = Math.max(0, Math.floor(bounds.x * header.samples / this.#tileSize));
+        const endTileX = Math.min(maxTileX, Math.ceil((bounds.x + bounds.width) * header.samples / this.#tileSize));
+        const startTileY = Math.max(0, Math.floor(bounds.y * header.lines / this.#tileSize));
+        const endTileY = Math.min(maxTileY, Math.ceil((bounds.y + bounds.height) * header.lines / this.#tileSize));
+        const tiles = [];
+
+        for (let y = startTileY; y < endTileY; y += 1) {
+            for (let x = startTileX; x < endTileX; x += 1) {
+                tiles.push({ x, y });
+            }
+        }
+
+        return tiles;
+    }
+
+    getVisibleBounds({ header, canvasWidth, canvasHeight }) {
+        if (!header || !canvasWidth || !canvasHeight) {
+            return { x: 0, y: 0, width: 1, height: 1 };
+        }
+
         const aspect = this.getAspectRatioCorrection({
             header,
             canvasWidth,
@@ -219,21 +246,17 @@ export class RenderSession {
         const unitEndX = (viewRight / aspect.x + 1) / 2;
         const unitStartY = (viewTop / -aspect.y + 1) / 2;
         const unitEndY = (viewBottom / -aspect.y + 1) / 2;
-        const maxTileX = Math.ceil(header.samples / this.#tileSize);
-        const maxTileY = Math.ceil(header.lines / this.#tileSize);
-        const startTileX = Math.max(0, Math.floor(unitStartX * header.samples / this.#tileSize));
-        const endTileX = Math.min(maxTileX, Math.ceil(unitEndX * header.samples / this.#tileSize));
-        const startTileY = Math.max(0, Math.floor(unitStartY * header.lines / this.#tileSize));
-        const endTileY = Math.min(maxTileY, Math.ceil(unitEndY * header.lines / this.#tileSize));
-        const tiles = [];
+        const x = Math.max(0, Math.min(1, unitStartX));
+        const y = Math.max(0, Math.min(1, unitStartY));
+        const right = Math.max(0, Math.min(1, unitEndX));
+        const bottom = Math.max(0, Math.min(1, unitEndY));
 
-        for (let y = startTileY; y < endTileY; y += 1) {
-            for (let x = startTileX; x < endTileX; x += 1) {
-                tiles.push({ x, y });
-            }
-        }
-
-        return tiles;
+        return {
+            x,
+            y,
+            width: Math.max(0, right - x),
+            height: Math.max(0, bottom - y),
+        };
     }
 
     getAspectRatioCorrection({ header, canvasWidth, canvasHeight }) {

@@ -19,6 +19,9 @@ const paths = {
   report: 'docs/SOFTWAREX_SUBMISSION_READINESS_REPORT_v1.md',
   releaseGateReport: 'docs/SOFTWAREX_RELEASE_GATE_REPORT_v1.md',
   releaseNotes: 'docs/SOFTWAREX_RELEASE_NOTES_0.1.0-alpha.1.md',
+  demoPage: 'examples/index.html',
+  demoStyles: 'examples/demo.css',
+  pagesWorkflow: '.github/workflows/pages.yml',
   alphaSummary: 'output/alpha/local-alpha-summary.json',
 };
 
@@ -85,6 +88,9 @@ for (const [item, relativePath] of [
   ['Citation metadata', paths.citation],
   ['Release gate report', paths.releaseGateReport],
   ['Release notes draft', paths.releaseNotes],
+  ['Reviewer demo page', paths.demoPage],
+  ['Reviewer demo styles', paths.demoStyles],
+  ['GitHub Pages demo workflow', paths.pagesWorkflow],
 ]) {
   const size = fileSize(relativePath);
   checks.push({

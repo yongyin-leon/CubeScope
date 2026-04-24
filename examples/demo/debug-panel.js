@@ -47,7 +47,8 @@ export class DebugPanel {
         // ZH: 在面板中查找所有控件元素。
         this.#bgStatsCheckbox = this.#panelElement.querySelector('#enableBgStats');
         this.#tilePreloadCheckbox = this.#panelElement.querySelector('#enableTilePreload');
-        this.#metricsContainer = this.#panelElement.querySelector('#performanceMetricsContainer');
+        this.#metricsContainer = this.#panelElement.querySelector('#performanceMetricsContainer')
+            ?? document.getElementById('performanceMetricsContainer');
         this.#metadataContainer = this.#panelElement.querySelector('#metadataContainer');
         this.#downloadButton = this.#panelElement.querySelector('#downloadReportBtn');
         this.#toggleButton = document.getElementById('toggleDebugPanelBtn');

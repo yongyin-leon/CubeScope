@@ -67,4 +67,23 @@ describe('RenderSession', () => {
             offsetY: 0.04999999999999999,
         });
     });
+
+    it('reports normalized visible bounds for minimap linkage', () => {
+        const session = new RenderSession();
+        session.zoomAround({
+            zoomFactor: 2,
+            anchorX: 0,
+            anchorY: 0,
+        });
+        expect(session.getVisibleBounds({
+            header: { samples: 100, lines: 100 },
+            canvasWidth: 500,
+            canvasHeight: 500,
+        })).toEqual({
+            x: 0.25,
+            y: 0.25,
+            width: 0.5,
+            height: 0.5,
+        });
+    });
 });

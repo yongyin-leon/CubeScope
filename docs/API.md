@@ -166,6 +166,21 @@ Current alpha guarantees for ENVI loads:
    `affineTransform` is derived from that metadata on the JS side
 6. `bandMetadata` remains an additive field and may currently be absent
 
+Spatial boundary note:
+
+1. `pixelToWorld(x, y)` and `worldToPixel(x, y)` operate in zero-based image
+   pixel space using the source affine transform when available
+2. ENVI `map info` reference pixels are interpreted using the ENVI convention
+   represented in the header; common `1, 1, x, y, pixelSizeX, pixelSizeY`
+   headers map image pixel `(0, 0)` to the reference world coordinate
+3. CubeScope preserves `coordinateSystemString`, datum, zone, hemisphere, and
+   units metadata, but does not infer EPSG codes from WKT or projection names
+4. assignment-style `map info` tokens such as `units=...` and `rotation=...`
+   are preserved in `rawTokens`; rotation is not applied by the current affine
+   mapper
+5. full CRS transformation, proj4-style conversion, world-space raster warping,
+   and map-tile reprojection are intentionally deferred beyond `0.1.0-alpha.1`
+
 Compatibility note:
 
 1. `load({ kind: 'envi-local', headerFile, dataFile })` remains the primary

@@ -67,6 +67,18 @@ npm run dev
 [`/examples/`](http://127.0.0.1:5173/examples/)，并加载
 `test-data/fixtures/` 下的 synthetic fixture。
 
+### 构建可部署 demo
+
+```bash
+npm run build:demo
+npm run preview:demo
+```
+
+`build:demo` 会生成 `demo-dist/` 静态站点，包含 demo 页面、synthetic fixture、
+sample catalog，以及浏览器运行所需的 worker/WASM 资源。仓库同时提供
+GitHub Pages workflow；当仓库公开并启用 Pages 后，推送 `main` 或手动触发
+`pages` workflow 即可发布可直接访问的在线 demo。
+
 ### Synthetic Fixture
 
 仓库自带了一个确定性的 ENVI synthetic fixture，用于 smoke test、

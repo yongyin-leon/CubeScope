@@ -1,6 +1,6 @@
 # SoftwareX Submission Readiness Report v1
 
-Generated: `2026-04-24T02:46:05.097Z`
+Generated: `2026-04-24T07:33:51.867Z`
 
 This report separates automated checks from author-controlled fields that can be hand-filled before final submission.
 
@@ -8,8 +8,8 @@ This report separates automated checks from author-controlled fields that can be
 
 | Status | Item | Detail |
 | --- | --- | --- |
-| PASS | SoftwareX word-count guard | 2805 words before References; current web-guide limit used here is 3000. |
-| PASS | LaTeX submission draft | docs/softwarex-template/cubescope-softwarex-submission-draft.tex exists (23595 bytes). |
+| PASS | SoftwareX word-count guard | 2829 words before References; current web-guide limit used here is 3000. |
+| PASS | LaTeX submission draft | docs/softwarex-template/cubescope-softwarex-submission-draft.tex exists (23754 bytes). |
 | PASS | Official LaTeX template | docs/softwarex-template/softwarex-osp-template.tex exists (10163 bytes). |
 | PASS | Official Word template | docs/softwarex-template/softwarex-osp-template.docx exists (44823 bytes). |
 | PASS | Architecture figure PNG | docs/figures/softwarex-architecture.png exists (140738 bytes). |
@@ -18,7 +18,10 @@ This report separates automated checks from author-controlled fields that can be
 | PASS | Cover letter draft | docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md exists (2816 bytes). |
 | PASS | Citation metadata | CITATION.cff exists (612 bytes). |
 | PASS | Release gate report | docs/SOFTWAREX_RELEASE_GATE_REPORT_v1.md exists (2768 bytes). |
-| PASS | Release notes draft | docs/SOFTWAREX_RELEASE_NOTES_0.1.0-alpha.1.md exists (3339 bytes). |
+| PASS | Release notes draft | docs/SOFTWAREX_RELEASE_NOTES_0.1.0-alpha.1.md exists (3582 bytes). |
+| PASS | Reviewer demo page | examples/index.html exists (15229 bytes). |
+| PASS | Reviewer demo styles | examples/demo.css exists (22028 bytes). |
+| PASS | GitHub Pages demo workflow | .github/workflows/pages.yml exists (1221 bytes). |
 | PASS | Local real dataset Git guard | No files under test-data/高光谱数据集 are tracked by Git. |
 | PASS | Highlights count and length | 4 highlights; longest is 68 characters. |
 | PASS | CITATION metadata baseline | CITATION.cff includes author and version metadata; verify release date at final tag. |

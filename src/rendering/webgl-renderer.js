@@ -268,7 +268,7 @@ export class WebGlRenderer {
 
         gl.viewport(0, 0, this.#canvas.width || this.#canvas.clientWidth, this.#canvas.height || this.#canvas.clientHeight);
         if (clearMode !== 'load') {
-            gl.clearColor(1, 1, 1, 1);
+            gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
         }
 

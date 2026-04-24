@@ -89,6 +89,7 @@ export async function probeFixtureAt(page, options = {}) {
         requireWorld = true,
     } = options;
 
+    await page.getByRole('button', { name: 'Probe', exact: true }).click();
     await page.locator('#viewer-container canvas').click();
     await page.waitForFunction(({ requireWorld: shouldRequireWorld }) => {
         const state = window.__cubescopeDemoState;

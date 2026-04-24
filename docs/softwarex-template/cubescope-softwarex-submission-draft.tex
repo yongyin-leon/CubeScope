@@ -183,9 +183,11 @@ Spatial support follows a conservative but useful boundary. ENVI
 \texttt{map info} and \texttt{coordinate system string} fields are normalized
 into \texttt{CubeHeader.spatialReference}, and where possible the software
 derives an affine transform that powers \texttt{pixelToWorld()} and
-\texttt{worldToPixel()}. This supports coordinate-aware inspection without
-forcing the renderer to perform full coordinate reference system conversion or
-real-time reprojection.
+\texttt{worldToPixel()} in zero-based image pixel space. Projection descriptors
+such as datum, zone, hemisphere, units, and coordinate-system strings are
+preserved as metadata, but the current alpha does not infer EPSG identifiers,
+apply rotation tokens, or perform full coordinate reference system conversion
+or real-time reprojection.
 
 Reproducibility is treated as part of the software contribution. CubeScope uses
 Node 22.x as the official release and reproducibility baseline, while newer

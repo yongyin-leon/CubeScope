@@ -137,6 +137,8 @@ class CubeViewer extends EventEmitter {
         this.#internalViewer.on('progress', (data) => this.emit('progress', data));
         this.#internalViewer.on('image-clicked', (data) => this.emit('image-clicked', data));
         this.#internalViewer.on('performance', (data) => this.emit('performance', data));
+        this.#internalViewer.on('tileloaded', (data) => this.emit('tileloaded', data));
+        this.#internalViewer.on('viewchange', (data) => this.emit('viewchange', data));
         this.#internalViewer.on('destroyed', () => this.emit('destroyed'));
     }
 
@@ -215,6 +217,32 @@ class CubeViewer extends EventEmitter {
      */
     updateConfig(config = {}) {
         this.#internalViewer.updateConfig(config);
+    }
+
+    /**
+     * EN: Resets the viewport to the full image extent.
+     * ZH: 将视口重置为完整影像范围。
+     */
+    resetView() {
+        this.#internalViewer.resetView?.();
+    }
+
+    /**
+     * EN: Zooms the viewport around the canvas center.
+     * ZH: 围绕画布中心缩放视口。
+     * @param {number} factor Zoom factor greater than 1 zooms in; less than 1 zooms out.
+     */
+    zoomBy(factor) {
+        this.#internalViewer.zoomBy?.(factor, { x: 0, y: 0 });
+    }
+
+    /**
+     * EN: Gets the current viewport state in normalized image coordinates.
+     * ZH: 获取当前视口状态，包含归一化影像范围。
+     * @returns {{scale: number, offsetX: number, offsetY: number, visibleBounds: {x: number, y: number, width: number, height: number}} | null}
+     */
+    getViewportState() {
+        return this.#internalViewer.getViewportState?.() ?? null;
     }
 
     /**

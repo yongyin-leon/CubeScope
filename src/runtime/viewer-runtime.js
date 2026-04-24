@@ -179,7 +179,7 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     unload() {
-        this.emit('log', '卸载当前数据源...');
+        this.emit('log', 'Unloading current source...');
         const sourceIdToCancel = this.#cubeStore?.getSourceId() ?? this.#activeSourceId;
         this.#activeSourceId += 1;
         this.#resetSourceState({
@@ -232,6 +232,10 @@ export class ViewerRuntime extends EventEmitter {
         return this.#cubeStore?.worldToPixel(x, y)
             ?? mapWorldToPixel(this.getHeader(), x, y);
     }
+
+    getViewportState() {
+        return this.#getViewportState();
+    }
     // --- Public API ---
 
     async init() {
@@ -270,7 +274,7 @@ export class ViewerRuntime extends EventEmitter {
     createReader() {
         const hdrBytes = this.getHdrBytes();
         if (!this.#wasmModule || !hdrBytes) {
-            this.emit('error', 'WASM 模块或 HDR 数据未准备好，无法创建 Reader。');
+            this.emit('error', 'WASM module or HDR data is not ready; unable to create reader.');
             return null;
         }
         return new this.#wasmModule.EnviReader(hdrBytes);
@@ -292,7 +296,7 @@ export class ViewerRuntime extends EventEmitter {
             cancelReason: 'source-switch',
         });
         this.emit('loadstart');
-        this.emit('log', `开始加载: ${headerSource.name}, ${dataSource.name}`);
+        this.emit('log', `Loading source: ${headerSource.name}, ${dataSource.name}`);
         this.#runtimePolicy.beginLoad();
         try {
             this.#hdrBytes = new Uint8Array(await headerSource.readAll());
@@ -301,7 +305,7 @@ export class ViewerRuntime extends EventEmitter {
                 headerBytes: this.#hdrBytes,
             });
             this.emit('headerloaded', this.#header);
-            this.emit('log', `HDR 解析成功。 格式(Interleave): ${this.#header.interleave}`);
+            this.emit('log', `ENVI header parsed. Interleave: ${this.#header.interleave}`);
             const defaultBands = selectDefaultBandsForHeader(this.#header);
             const defaultBandsChanged = (
                 defaultBands.r !== this.#currentBands.r
@@ -312,7 +316,7 @@ export class ViewerRuntime extends EventEmitter {
             if (defaultBandsChanged) {
                 this.emit('bandschanged', this.#currentBands);
             }
-            this.emit('log', `默认显示波段: R:${this.#currentBands.r}, G:${this.#currentBands.g}, B:${this.#currentBands.b}。`);
+            this.emit('log', `Default RGB bands: R=${this.#currentBands.r}, G=${this.#currentBands.g}, B=${this.#currentBands.b}`);
 
             const metadataSummary = await this.#lifecycle.createMetadataSummary({
                 dataSource,
@@ -331,8 +335,8 @@ export class ViewerRuntime extends EventEmitter {
                 dataSource,
                 dataSourceDescriptor: this.#dataSourceDescriptor,
             });
-            this.emit('log', "正在为初始视图计算统计值...");
-            this.emit('statechange', { loading: true, message: '计算统计值...' });
+            this.emit('log', 'Computing statistics for the initial view...');
+            this.emit('statechange', { loading: true, message: 'Computing statistics...' });
             const initialBands = uniqueBands([this.#currentBands.r, this.#currentBands.g, this.#currentBands.b])
                 .filter(b => !this.#hasBandStats(b));
             const dispatchResult = this.#dispatchStatsCalculation(initialBands, true);
@@ -340,7 +344,7 @@ export class ViewerRuntime extends EventEmitter {
                 throw new Error('Initial statistics task could not be dispatched.');
             }
         } catch (err) {
-            this.emit('error', `文件加载或解析失败: ${err.message}`);
+            this.emit('error', `File load or parse failed: ${err.message}`);
             this.emit('loadend');
             this.emit('statechange', { loading: false });
             this.#resetSourceState({
@@ -385,23 +389,23 @@ export class ViewerRuntime extends EventEmitter {
         this.#currentBands = transitionPlan.nextBands;
         this.emit('bandschanged', this.#currentBands);
         this.#runtimePolicy.beginBandSwitch();
-        console.log('[PERF-LOG] 计时器启动: Band Switch Time');
-        this.emit('log', `波段组合已更改为 R:${requestedBands.r}, G:${requestedBands.g}, B:${requestedBands.b}。`);
+        console.log('[PERF-LOG] Timer started: Band Switch Time');
+        this.emit('log', `RGB bands changed to R=${requestedBands.r}, G=${requestedBands.g}, B=${requestedBands.b}`);
         const plan = transitionPlan.plan;
         if (plan.ready) {
-            this.emit('log', "从缓存加载统计值，开始平滑过渡...");
+            this.emit('log', 'Loading cached statistics and starting transition...');
             this.#globalStats = plan.globalStats;
             this.#startTransition();
         } else {
-            this.emit('log', `缓存缺失，正在为波段 ${plan.missingBands.join(',')} 计算统计值...`);
-            this.emit('statechange', { loading: true, message: '计算统计值...' });
+            this.emit('log', `Missing cached statistics; computing bands ${plan.missingBands.join(',')}...`);
+            this.emit('statechange', { loading: true, message: 'Computing statistics...' });
             this.#workScheduler.startWaitingForStats();
             this.#dispatchStatsCalculation(plan.missingBands, false);
         }
     }
 
     destroy() {
-        this.emit('log', '销毁 viewer runtime 实例...');
+        this.emit('log', 'Destroying viewer runtime instance...');
         const sourceIdToCancel = this.#cubeStore?.getSourceId() ?? this.#activeSourceId;
         this.#activeSourceId += 1;
         this.#resetSourceState({
@@ -420,15 +424,31 @@ export class ViewerRuntime extends EventEmitter {
     updateConfig(newConfig = {}) {
         const oldConfig = { ...this.#config };
         this.#config = { ...this.#config, ...newConfig };
-        this.emit('log', `配置已更新: ${JSON.stringify(this.#config)}`);
+        this.emit('log', `Runtime configuration updated: ${JSON.stringify(this.#config)}`);
         if (this.#config.backgroundStats && !oldConfig.backgroundStats) {
-            this.emit('log', '后台统计已在运行时开启，尝试启动...');
+            this.emit('log', 'Background statistics enabled at runtime; starting queue...');
             if (this.#header) { this.#startBackgroundStatCalculation(); }
         }
         if (this.#config.tilePreloading && !oldConfig.tilePreloading) {
-            this.emit('log', '瓦片预加载已在运行时开启，尝试启动...');
+            this.emit('log', 'Tile preloading enabled at runtime; starting queue...');
             if (this.#header) { this.#startPreloading(); }
         }
+    }
+
+    resetView() {
+        if (!this.#header) return;
+        this.#renderSession.resetView();
+        requestAnimationFrame(() => this.#updateAndDraw());
+    }
+
+    zoomBy(factor, anchor = { x: 0, y: 0 }) {
+        if (!this.#header) return;
+        this.#renderSession.zoomAround({
+            zoomFactor: Number(factor) || 1,
+            anchorX: Number(anchor.x) || 0,
+            anchorY: Number(anchor.y) || 0,
+        });
+        requestAnimationFrame(() => this.#updateAndDraw());
     }
 
     // 在 viewer runtime 中添加这个新方法
@@ -449,7 +469,7 @@ export class ViewerRuntime extends EventEmitter {
         });
 
         if (pixel) {
-            this.emit('log', `图像被点击，像素坐标: (${pixel.x}, ${pixel.y})`);
+            this.emit('log', `Image clicked at pixel (${pixel.x}, ${pixel.y})`);
             this.emit('image-clicked', pixel);
         }
     }
@@ -661,6 +681,10 @@ export class ViewerRuntime extends EventEmitter {
             let transitionTilesRemaining = null;
             if (stored) {
                 this.#renderSession.markCurrentTileLoaded(tileKey);
+                this.emit('tileloaded', this.#createTileLoadedEvent({
+                    slot,
+                    payload,
+                }));
                 if (isTransitioning) {
                     transitionTilesRemaining = this.#renderSession.consumeTransitionTile();
                     if (transitionTilesRemaining === 0) {
@@ -870,7 +894,7 @@ export class ViewerRuntime extends EventEmitter {
     }
 
     #updateAndDraw() {
-        return this.#viewController.updateAndDraw({
+        const result = this.#viewController.updateAndDraw({
             header: this.#header,
             renderer: this.#renderer,
             sourceId: this.#activeSourceId,
@@ -883,6 +907,10 @@ export class ViewerRuntime extends EventEmitter {
             processTileRequestQueue: () => this.#processTileRequestQueue(),
             processPreloadQueue: () => this.#processPreloadQueue(),
         });
+        if (result.rendered) {
+            this.emit('viewchange', this.#getViewportState());
+        }
+        return result;
     }
     
     #calculateVisibleTiles() {
@@ -1024,6 +1052,41 @@ export class ViewerRuntime extends EventEmitter {
 
     #resizeCanvas() {
         return this.#viewController.resizeCanvas(this.#canvas);
+    }
+
+    #getViewportState() {
+        if (!this.#header || !this.#canvas) {
+            return null;
+        }
+
+        return {
+            ...this.#renderSession.getViewState(),
+            visibleBounds: this.#renderSession.getVisibleBounds({
+                header: this.#header,
+                canvasWidth: this.#canvas.clientWidth,
+                canvasHeight: this.#canvas.clientHeight,
+            }),
+            canvasWidth: this.#canvas.clientWidth,
+            canvasHeight: this.#canvas.clientHeight,
+        };
+    }
+
+    #createTileLoadedEvent({ slot, payload }) {
+        return {
+            sourceId: this.#activeSourceId,
+            slot,
+            tile: payload.tile,
+            effectiveWidth: payload.effectiveWidth,
+            effectiveHeight: payload.effectiveHeight,
+            pixels: payload.pixels,
+            tileSize: this.#renderSession.getTileSize(),
+            bands: { ...this.#currentBands },
+            header: {
+                samples: this.#header.samples,
+                lines: this.#header.lines,
+                bands: this.#header.bands,
+            },
+        };
     }
     #handleRendererLifecycleEvent(event) {
         if (event?.type === 'renderer-fallback-armed') {

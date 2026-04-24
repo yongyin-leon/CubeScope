@@ -26,6 +26,8 @@
     "build:worker": "vite build --config vite.worker.config.js",
     "build:assets": "node scripts/copy-runtime-assets.mjs",
     "build": "npm run build:wasm && npm run clean && npm run build:sdk && npm run build:worker && npm run build:assets",
+    "build:demo": "npm run build && vite build --config vite.demo.config.js && node scripts/copy-demo-runtime-assets.mjs",
+    "preview:demo": "vite preview --config vite.demo.config.js --host 127.0.0.1 --port 4174",
     "test:unit": "vitest run",
     "test:smoke": "playwright test",
     "test": "npm run test:unit && npm run test:smoke",

@@ -205,7 +205,7 @@ export class WebGpuRenderer {
                 view: textureView,
                 loadOp: clearMode === 'load' ? 'load' : 'clear',
                 storeOp: 'store',
-                clearValue: { r: 1, g: 1, b: 1, a: 1 },
+                clearValue: { r: 0, g: 0, b: 0, a: 1 },
             }],
         });
 

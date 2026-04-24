@@ -81,7 +81,7 @@ export class ViewerRuntimeWorkExecutor {
         hasBandStats,
     }) {
         if (!enabled) {
-            this.#emitLog('后台统计功能已关闭。');
+            this.#emitLog('Background statistics are disabled.');
             return {
                 started: false,
                 pendingBands: [],
@@ -97,14 +97,14 @@ export class ViewerRuntimeWorkExecutor {
 
         this.#scheduler.replaceBackgroundStatsQueue(pendingBands);
         if (!this.#scheduler.hasBackgroundStatsWork()) {
-            this.#emitLog('所有波段统计值已在缓存中，无需后台计算。');
+            this.#emitLog('All band statistics are cached; background computation is not required.');
             return {
                 started: false,
                 pendingBands,
             };
         }
 
-        this.#emitLog(`开始后台统计... 队列中有 ${this.#scheduler.getBackgroundStatsCount()} 个波段待处理。`);
+        this.#emitLog(`Starting background statistics: ${this.#scheduler.getBackgroundStatsCount()} bands queued.`);
         return {
             started: true,
             pendingBands,
@@ -176,7 +176,7 @@ export class ViewerRuntimeWorkExecutor {
 
             const { tile } = nextTile;
             const bandsPayload = [currentBands.r, currentBands.g, currentBands.b];
-            this.#debugLog(`[主线程-1-发送任务] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
+            this.#debugLog(`[main-thread:tile-request] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
             this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
                 sourceId,
                 hdrBytes,
@@ -268,7 +268,7 @@ export class ViewerRuntimeWorkExecutor {
             }
 
             const bandsPayload = [currentBands.r, currentBands.g, currentBands.b];
-            this.#debugLog(`[主线程-1-发送任务] (预加载) tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
+            this.#debugLog(`[main-thread:preload-request] tile: (${tile.x}, ${tile.y}), bands:`, bandsPayload);
             this.#postTrackedWorkerRequest(worker, buildTileWorkerRequest({
                 sourceId,
                 hdrBytes,

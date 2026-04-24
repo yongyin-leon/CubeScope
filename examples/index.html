@@ -2,99 +2,301 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>CubeScope - Alpha Demo</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; background-color: #f0f0f0; color: #333;}
-        .controls { padding: 15px; border-bottom: 1px solid #ddd; background-color: #fff; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 10; }
-        .controls button { font-weight: bold; padding: 8px 15px; background-color: #333333; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; flex-shrink: 0; }
-        .controls button:hover { background-color: #111111; }
-        .controls button:disabled { background-color: #6c757d; cursor: not-allowed; }
-        .controls span { font-family: monospace; background-color: #e9ecef; padding: 5px 8px; border-radius: 4px; }
-        .band-selector { display: flex; gap: 5px; align-items: center; }
-        .band-selector label { font-weight: bold; }
-        .band-selector select { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
-        .band-selector select:disabled { background-color: #e9ecef; }
-        #log { height: 200px; overflow-y: auto; border-top: 1px solid #ddd; padding: 10px; font-family: monospace; font-size: 12px; white-space: pre-wrap; flex-shrink: 0; background-color: #fdfdfd; }
-        #log::before { content: "--- Log ---"; display: block; padding-bottom: 5px; font-weight: bold; color: #555; }
-        #viewer-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; background-color: #000; }
-        .hidden { display: none; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CubeScope - ENVI HTTP Range Demo</title>
+    <link rel="stylesheet" href="./demo.css">
 </head>
 <body>
-    <div class="controls">
-        <button id="selectFileBtn" disabled>Initializing...</button>
-        <select id="sampleCatalogSelect" disabled>
-            <option>Loading registered samples...</option>
-        </select>
-        <button id="loadSampleBtn" disabled>Load Sample</button>
-        <span id="fileNameSpan">No file selected</span>
-        <span id="statusSpan" style="font-style: italic; color: #555;"></span>
-        <div class="band-selector">
-            <label for="rBandSelect" style="color: red;">R:</label>
-            <select id="rBandSelect" disabled></select>
-        </div>
-        <div class="band-selector">
-            <label for="gBandSelect" style="color: green;">G:</label>
-            <select id="gBandSelect" disabled></select>
-        </div>
-        <div class="band-selector">
-            <label for="bBandSelect" style="color: blue;">B:</label>
-            <select id="bBandSelect" disabled></select>
-        </div>
-        <button id="randomBandsBtn" disabled>Random Combination</button>
-        <span id="bandSwitchCountSpan" style="margin-left: auto;">Band Switch Count: 0</span>
-    </div>
-
-    <div class="controls">
-        <button id="toggleChartBtn" disabled>Initializing Performance Panel...</button>
-        <select id="timeRangeSelect">
-            <option value="all">All</option>
-            <option value="60">60s</option>
-            <option value="300">5m</option>
-            <option value="600">10m</option>
-        </select>
-        <button id="zoomChartBtn">Zoom</button>
-    </div>
-
-    <div id="performanceChartContainer" style="display:none; padding: 10px; background-color: #fff; border-top: 1px solid #ddd;">
-        <div id="performanceChart" style="height: 240px;"></div>
-    </div>
-
-    <div id="chartModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); justify-content: center; align-items: center;">
-        <div style="width: 80%; height: 60%; background: #fff; position: relative; padding: 10px;">
-            <button id="closeChartModal" style="position: absolute; top: 10px; right: 10px;">Close</button>
-            <div id="largeChartContainer" style="height: 100%;"></div>
-        </div>
-    </div>
-
-    <button id="toggleDebugPanelBtn" style="position: fixed; right: 12px; bottom: 12px; z-index: 1000;">Debug Panel</button>
-    <div id="debugPanel" class="hidden" style="position: fixed; right: 12px; top: 60px; width: 360px; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 999; padding: 10px;">
-        <div style="display:flex; align-items:center; justify-content: space-between; margin-bottom:8px;">
-            <strong>Debug Panel</strong>
-            <button id="closeDebugPanelBtn" style="background:#333; color:#fff; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">Close</button>
-        </div>
-        <div style="margin-bottom:8px;">
-            <label><input type="checkbox" id="enableBgStats" checked> Background Stats</label>
-            <label style="margin-left:10px;"><input type="checkbox" id="enableTilePreload" checked> Tile Preload</label>
-        </div>
-        <div id="metadataContainer" style="margin-bottom:8px;"></div>
-        <div id="performanceMetricsContainer" style="margin-bottom:8px;"></div>
-        <button id="downloadReportBtn" style="background:#333; color:#fff; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; margin-bottom:8px;">Download Report</button>
-        <div id="systemMonitorPanel"></div>
-        <div id="spectralChartContainer" style="margin-top:8px;">
-            <div style="display:flex; align-items:center; justify-content: space-between; margin-bottom:6px;">
-                <strong>Spectral Profile</strong>
-                <button id="clearSpectralBtn" style="background:#333; color:#fff; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">Clear</button>
+    <div class="reviewer-demo">
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-cube" aria-hidden="true">
+                    <span></span>
+                </div>
+                <div class="brand-name">CubeScope</div>
             </div>
-            <div id="spectralChart" style="height: 240px;"></div>
-        </div>
+
+            <div class="sample-picker">
+                <span class="field-label">Sample</span>
+                <select id="sampleCatalogSelect" disabled>
+                    <option>Loading registered samples...</option>
+                </select>
+            </div>
+
+            <button id="loadSampleBtn" class="header-button" disabled>
+                <span class="button-icon cloud-icon" aria-hidden="true"></span>
+                Load Sample
+            </button>
+            <button id="selectFileBtn" class="header-button" disabled>
+                <span class="button-icon file-icon" aria-hidden="true"></span>
+                Load Local ENVI...
+            </button>
+            <input id="fileInput" type="file" multiple>
+
+            <div class="renderer-pill">
+                <span class="renderer-dot" aria-hidden="true"></span>
+                <span id="rendererStatusBadge">WebGL: Initializing</span>
+                <select id="rendererModeSelect" aria-label="Renderer mode">
+                    <option value="auto">Auto</option>
+                    <option value="webgl">WebGL</option>
+                    <option value="webgpu">WebGPU</option>
+                </select>
+            </div>
+
+            <div class="metric-card">
+                <span>Initial view</span>
+                <strong id="metricInitialView">--</strong>
+            </div>
+            <div class="metric-card">
+                <span>Band switch</span>
+                <strong id="metricBandSwitch">--</strong>
+            </div>
+            <div class="metric-card">
+                <span>FPS</span>
+                <strong id="metricFps">60</strong>
+            </div>
+
+            <div class="header-icons" aria-label="Demo utilities">
+                <button id="screenshotBtn" title="Screenshot" aria-label="Screenshot"></button>
+                <button id="infoBtn" title="View metadata" aria-label="View metadata"></button>
+                <button id="helpBtn" title="Interaction help" aria-label="Interaction help"></button>
+                <button id="moreBtn" title="Advanced diagnostics" aria-label="Advanced diagnostics"></button>
+            </div>
+        </header>
+
+        <nav class="tool-ribbon" aria-label="Viewer tools">
+            <button class="tool-button active" type="button" data-tool="pan">
+                <span class="tool-icon pan-icon" aria-hidden="true"></span>
+                Pan
+            </button>
+            <button class="tool-button" type="button" data-tool="zoom">
+                <span class="tool-icon zoom-icon" aria-hidden="true"></span>
+                Zoom
+            </button>
+            <button class="tool-button" type="button" data-tool="probe">
+                <span class="tool-icon probe-icon" aria-hidden="true"></span>
+                Probe
+            </button>
+            <button class="tool-button" type="button" data-tool="box">
+                <span class="tool-icon box-icon" aria-hidden="true"></span>
+                Box
+            </button>
+            <button class="tool-button" type="button" data-tool="pixel-inspector">
+                <span class="tool-icon inspect-icon" aria-hidden="true"></span>
+                Pixel Inspector
+            </button>
+            <button class="tool-button" type="button" data-tool="spectral-profile">
+                <span class="tool-icon wave-icon" aria-hidden="true"></span>
+                Spectral Profile
+            </button>
+            <button id="toolScreenshotBtn" class="tool-button" type="button">
+                <span class="tool-icon camera-icon" aria-hidden="true"></span>
+                Screenshot
+            </button>
+            <button id="resetViewBtn" class="tool-button" type="button">
+                <span class="tool-icon reset-icon" aria-hidden="true"></span>
+                Reset View
+            </button>
+        </nav>
+
+        <main class="workbench">
+            <section id="viewportPanel" class="viewport-panel" aria-label="Hyperspectral viewer">
+                <div class="viewer-shell">
+                    <div class="mini-map" aria-hidden="true">
+                        <canvas id="miniMapCanvas" width="180" height="180"></canvas>
+                        <div class="mini-map-window"></div>
+                    </div>
+
+                    <div class="zoom-stack" aria-label="Viewport controls">
+                        <button type="button" data-zoom-action="in" aria-label="Zoom in">+</button>
+                        <button type="button" data-zoom-action="out" aria-label="Zoom out">-</button>
+                        <button type="button" data-zoom-action="reset" aria-label="Reset to full extent">1:1</button>
+                        <button type="button" data-zoom-action="fit" aria-label="Fit to window">[]</button>
+                    </div>
+
+                    <div class="coordinate-chip">
+                        X: <strong id="overlayPixelX">--</strong>
+                        <span></span>
+                        Y: <strong id="overlayPixelY">--</strong>
+                        <span></span>
+                        <strong id="overlaySize">--</strong>
+                    </div>
+
+                    <div id="viewer-container"></div>
+                    <div class="crosshair" aria-hidden="true"></div>
+                    <div class="scale-bar" aria-hidden="true">
+                        <span>500 m</span>
+                    </div>
+                </div>
+
+                <section class="event-console">
+                    <div class="console-tabs">
+                        <button class="console-tab active" type="button" data-console-tab="all">Event Log <span id="eventLogCount">0</span></button>
+                        <button class="console-tab" type="button" data-console-tab="network">Network <span id="networkCount">0</span></button>
+                        <button class="console-tab" type="button" data-console-tab="tiles">Tiles <span id="tileCount">0</span></button>
+                        <button class="console-tab" type="button" data-console-tab="stats">Stats <span id="statsCount">0</span></button>
+                        <div class="console-actions">
+                            <button id="pauseLogBtn" type="button">Pause</button>
+                            <button id="clearLogBtn" type="button">Clear</button>
+                            <button id="toggleConsoleBtn" type="button" aria-expanded="true" aria-label="Collapse event console"></button>
+                        </div>
+                    </div>
+                    <div class="console-table-wrap">
+                        <table class="console-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Level</th>
+                                    <th>Source</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody id="log"></tbody>
+                        </table>
+                    </div>
+                    <span id="bandSwitchCountSpan" class="band-switch-count">Band Switch Count: 0</span>
+                </section>
+            </section>
+
+            <aside class="inspector" aria-label="Dataset inspector">
+                <section class="side-panel">
+                    <header>
+                        <h2>Dataset</h2>
+                        <button type="button" class="panel-collapse-button" data-panel-toggle aria-expanded="true" aria-label="Collapse dataset panel"></button>
+                    </header>
+                    <dl class="metadata-list">
+                        <dt>Name</dt>
+                        <dd id="fileNameSpan">No file selected</dd>
+                        <dt>Source</dt>
+                        <dd id="datasetSourceKind">None</dd>
+                        <dt>Dimensions</dt>
+                        <dd id="datasetDimensions">--</dd>
+                        <dt>Interleave</dt>
+                        <dd id="datasetFormat">--</dd>
+                        <dt>Data Type</dt>
+                        <dd id="datasetDataType">--</dd>
+                        <dt>Wavelengths</dt>
+                        <dd id="datasetWavelengths">--</dd>
+                        <dt>File Size (raw)</dt>
+                        <dd id="datasetFileSize">--</dd>
+                        <dt>Map Info</dt>
+                        <dd id="datasetCrs">--</dd>
+                    </dl>
+                    <button id="metadataToggleBtn" class="outline-button" type="button">View Full Metadata</button>
+                    <pre id="metadataContainer" hidden></pre>
+                </section>
+
+                <section class="side-panel">
+                    <header>
+                        <h2>RGB Composite</h2>
+                        <div class="mini-actions">
+                            <button id="randomBandsBtn" type="button" disabled>Auto</button>
+                            <button id="resetBandsBtn" type="button" disabled aria-label="Reset RGB bands"></button>
+                            <button type="button" class="panel-collapse-button" data-panel-toggle aria-expanded="true" aria-label="Collapse RGB panel"></button>
+                        </div>
+                    </header>
+                    <div class="band-row band-row-r">
+                        <label for="rBandSelect">R <span>Band</span></label>
+                        <select id="rBandSelect" disabled></select>
+                        <input id="rBandSlider" type="range" min="1" max="1" value="1" disabled>
+                    </div>
+                    <div class="band-row band-row-g">
+                        <label for="gBandSelect">G <span>Band</span></label>
+                        <select id="gBandSelect" disabled></select>
+                        <input id="gBandSlider" type="range" min="1" max="1" value="1" disabled>
+                    </div>
+                    <div class="band-row band-row-b">
+                        <label for="bBandSelect">B <span>Band</span></label>
+                        <select id="bBandSelect" disabled></select>
+                        <input id="bBandSlider" type="range" min="1" max="1" value="1" disabled>
+                    </div>
+                </section>
+
+                <section class="side-panel">
+                    <header>
+                        <h2>Pixel / World Probe</h2>
+                        <div class="panel-icons" aria-hidden="true">
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <button type="button" class="panel-collapse-button" data-panel-toggle aria-expanded="true" aria-label="Collapse probe panel"></button>
+                    </header>
+                    <dl id="statusSpan" class="probe-grid">
+                        <dt>Pixel (X, Y)</dt>
+                        <dd>--</dd>
+                        <dt>World (X, Y)</dt>
+                        <dd>--</dd>
+                        <dt>Value @ R</dt>
+                        <dd>--</dd>
+                        <dt>Value @ G</dt>
+                        <dd>--</dd>
+                        <dt>Value @ B</dt>
+                        <dd>--</dd>
+                    </dl>
+                </section>
+
+                <section class="side-panel">
+                    <header>
+                        <h2 id="spectralTitle">Spectral Profile</h2>
+                        <div class="mini-actions">
+                            <button id="clearSpectralBtn" type="button">Clear</button>
+                            <button type="button" class="panel-collapse-button" data-panel-toggle aria-expanded="true" aria-label="Collapse spectral panel"></button>
+                        </div>
+                    </header>
+                    <div id="spectralChart" class="spectral-chart">
+                        <div class="empty-chart">Click the image to sample a spectrum.</div>
+                    </div>
+                </section>
+
+                <section class="side-panel">
+                    <header>
+                        <h2>Performance</h2>
+                        <button type="button" class="panel-collapse-button" data-panel-toggle aria-expanded="true" aria-label="Collapse performance panel"></button>
+                    </header>
+                    <dl class="performance-grid">
+                        <dt>Renderer</dt>
+                        <dd id="perfRenderer">--</dd>
+                        <dt>FPS</dt>
+                        <dd>60</dd>
+                        <dt>GPU</dt>
+                        <dd id="perfGpu">Browser GPU</dd>
+                        <dt>Initial View</dt>
+                        <dd id="perfInitialView">--</dd>
+                        <dt>Texture Size</dt>
+                        <dd id="perfTextureSize">8192 x 8192</dd>
+                        <dt>Band Switch</dt>
+                        <dd id="perfBandSwitch">--</dd>
+                        <dt>Last Tile Load</dt>
+                        <dd id="perfTileLoad">--</dd>
+                    </dl>
+                </section>
+
+                <section id="debugPanel" class="side-panel advanced-panel">
+                    <header>
+                        <h2>Advanced Diagnostics</h2>
+                        <button id="toggleDebugPanelBtn" type="button" class="panel-collapse-button" data-panel-toggle aria-expanded="true" aria-label="Toggle advanced diagnostics"></button>
+                    </header>
+                    <div class="advanced-grid">
+                        <span>Cache</span>
+                        <span id="cacheSummary">Memory: --</span>
+                        <span>Requests</span>
+                        <span id="requestSummary">HTTP range requests</span>
+                        <span>Compression</span>
+                        <span>None</span>
+                        <span>Worker Threads</span>
+                        <span id="workerSummary">--</span>
+                        <span>Build</span>
+                        <span>v0.1.0-alpha.1</span>
+                    </div>
+                    <div class="advanced-toggles">
+                        <label><input id="enableBgStats" type="checkbox" checked> Background Stats</label>
+                        <label><input id="enableTilePreload" type="checkbox" checked> Tile Preload</label>
+                    </div>
+                    <button id="downloadReportBtn" class="outline-button" type="button">Download Report</button>
+                </section>
+            </aside>
+        </main>
     </div>
-
-    <div id="viewer-container"></div>
-    
-    <div id="log"></div>
-
-    <input type="file" id="fileInput" multiple style="display: none;">
 
     <script type="module" src="./demo-app.js"></script>
 </body>

@@ -146,9 +146,11 @@ used.
 Spatial support follows a conservative but useful boundary. ENVI `map info` and
 `coordinate system string` fields are normalized into
 `CubeHeader.spatialReference`, and where possible the software derives an
-affine transform that powers `pixelToWorld()` and `worldToPixel()`. This
-supports coordinate-aware inspection without forcing the renderer to perform
-full coordinate reference system conversion or real-time reprojection.
+affine transform that powers `pixelToWorld()` and `worldToPixel()` in
+zero-based image pixel space. Projection descriptors such as datum, zone,
+hemisphere, units, and coordinate-system strings are preserved as metadata, but
+the current alpha does not infer EPSG identifiers, apply rotation tokens, or
+perform full coordinate reference system conversion or real-time reprojection.
 
 ### 2.4 Availability and quality control
 

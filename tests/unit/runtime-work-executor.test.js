@@ -102,7 +102,7 @@ describe('ViewerRuntimeWorkExecutor', () => {
             started: true,
             pendingBands: [1, 3],
         });
-        expect(harness.logs).toContain('开始后台统计... 队列中有 2 个波段待处理。');
+        expect(harness.logs).toContain('Starting background statistics: 2 bands queued.');
     });
 
     it('emits progress and dispatches background stats work', () => {

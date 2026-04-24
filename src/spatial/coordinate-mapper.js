@@ -76,6 +76,10 @@ function normalizeHemisphere(value) {
     return undefined;
 }
 
+function isMapInfoAssignmentToken(value) {
+    return /^\w+\s*=/.test(String(value).trim());
+}
+
 function extractUnits(tokens = []) {
     for (const token of tokens) {
         const match = /^units\s*=\s*(.+)$/i.exec(token);
@@ -85,6 +89,31 @@ function extractUnits(tokens = []) {
     }
 
     return undefined;
+}
+
+function parseMapInfoTail(tokens = []) {
+    const units = extractUnits(tokens);
+    const positionalTokens = tokens.filter((token) => !isMapInfoAssignmentToken(token));
+    let cursor = 0;
+
+    const zone = normalizeInteger(positionalTokens[cursor]);
+    if (zone != null) {
+        cursor += 1;
+    }
+
+    const hemisphere = normalizeHemisphere(positionalTokens[cursor]);
+    if (hemisphere) {
+        cursor += 1;
+    }
+
+    const datum = normalizeOptionalString(positionalTokens[cursor]);
+
+    return {
+        zone,
+        hemisphere,
+        datum,
+        units,
+    };
 }
 
 function createMapInfoFromTokens(tokens) {
@@ -100,10 +129,7 @@ function createMapInfoFromTokens(tokens) {
         referenceCoordinateYRaw,
         pixelSizeXRaw,
         pixelSizeYRaw,
-        zoneRaw,
-        hemisphereRaw,
-        datumRaw,
-        ...rest
+        ...tailTokens
     ] = tokens;
 
     const referencePixel = normalizeCoordinatePair({
@@ -123,10 +149,12 @@ function createMapInfoFromTokens(tokens) {
         return undefined;
     }
 
-    const zone = normalizeInteger(zoneRaw);
-    const hemisphere = normalizeHemisphere(hemisphereRaw);
-    const datum = normalizeOptionalString(datumRaw);
-    const units = extractUnits([zoneRaw, hemisphereRaw, datumRaw, ...rest]);
+    const {
+        zone,
+        hemisphere,
+        datum,
+        units,
+    } = parseMapInfoTail(tailTokens);
 
     return Object.freeze({
         projectionName: normalizeOptionalString(projectionNameRaw),

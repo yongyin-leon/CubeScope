@@ -21,8 +21,12 @@ fallback.
   `wavelength` fields when available.
 - Spectral probing for pixel inspection.
 - Affine pixel/world mapping when ENVI spatial metadata is present.
+- Common ENVI `map info` variants normalized for UTM and non-UTM headers, while
+  full CRS conversion and reprojection remain deferred.
 - Explicit runtime asset packaging for worker and WebAssembly files.
 - Browser validation through Playwright smoke tests and browser-matrix reports.
+- Reviewer-facing static demo page with a compact viewer workspace and
+  GitHub Pages deployment workflow.
 
 ## Verification Snapshot
 
