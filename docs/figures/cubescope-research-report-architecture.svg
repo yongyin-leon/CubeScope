@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">CubeScope 科研项目汇报架构图</title>
+  <desc id="desc">从科研项目汇报角度展示 CubeScope 的研究目标、数据输入、核心方法、浏览器运行时、渲染输出和可复现验证链路。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L12,7 L2,12 Z" fill="#26323f"/>
+    </marker>
+    <marker id="soft-arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L12,7 L2,12 Z" fill="#6b7480"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 46px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 400 24px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #536171; }
+      .section-title { font: 700 24px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #26323f; }
+      .section-note { font: 400 18px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .box-title { font: 700 25px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #111827; }
+      .box-text { font: 400 20px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .small { font: 400 18px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .tag { font: 700 18px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #ffffff; }
+      .panel { fill: #ffffff; stroke: #d7dee8; stroke-width: 2; }
+      .need { fill: #ecfdf5; stroke: #2f8f6f; stroke-width: 2.5; }
+      .data { fill: #eff6ff; stroke: #3f6fba; stroke-width: 2.5; }
+      .method { fill: #fff7ed; stroke: #c8752a; stroke-width: 2.5; }
+      .runtime { fill: #f5f3ff; stroke: #7c5cc4; stroke-width: 2.5; }
+      .output { fill: #fdf2f8; stroke: #be4b85; stroke-width: 2.5; }
+      .verify { fill: #f0fdfa; stroke: #0f8a8a; stroke-width: 2.5; }
+      .arrow { stroke: #26323f; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .soft { stroke: #6b7480; stroke-width: 2.5; fill: none; stroke-dasharray: 9 8; marker-end: url(#soft-arrow); }
+      .divider { stroke: #d7dee8; stroke-width: 2; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1920" height="1080"/>
+  <text class="title" x="90" y="88">CubeScope 科研项目架构图</text>
+  <text class="subtitle" x="90" y="128">面向 ENVI 高光谱数据的浏览器原生、本地优先、硬件加速可复用 viewer kernel</text>
+
+  <rect class="panel" x="70" y="165" width="1780" height="192" rx="8"/>
+  <text class="section-title" x="100" y="206">1. 研究问题与数据入口</text>
+  <text class="section-note" x="100" y="236">把传统桌面/服务端遥感浏览能力前移到浏览器端，支撑快速检查、嵌入式展示和可复现实验。</text>
+
+  <rect class="need" x="105" y="260" width="390" height="72" rx="8"/>
+  <text class="box-title" x="130" y="290">研究需求</text>
+  <text class="box-text" x="130" y="318">轻量浏览 · 本地优先 · 可嵌入</text>
+
+  <rect class="data" x="590" y="260" width="430" height="72" rx="8"/>
+  <text class="box-title" x="615" y="290">数据输入</text>
+  <text class="box-text" x="615" y="318">本地 .hdr + 数据文件 / HTTP Range</text>
+
+  <rect class="verify" x="1115" y="260" width="430" height="72" rx="8"/>
+  <text class="box-title" x="1140" y="290">可复现实验数据</text>
+  <text class="box-text" x="1140" y="318">Synthetic fixture · 公开样例 · 真实数据验证</text>
+
+  <path class="arrow" d="M495 296 L590 296"/>
+  <path class="arrow" d="M1020 296 L1115 296"/>
+
+  <rect class="panel" x="70" y="405" width="1780" height="390" rx="8"/>
+  <text class="section-title" x="100" y="446">2. 核心技术路线与系统实现</text>
+  <text class="section-note" x="100" y="476">按 byte access、格式解释、立方体服务、运行时调度、GPU 渲染分层，避免解析、分析和显示逻辑耦合。</text>
+
+  <rect class="data" x="105" y="525" width="255" height="118" rx="8"/>
+  <text class="box-title" x="130" y="558">DataSource</text>
+  <text class="box-text" x="130" y="588">File / Blob</text>
+  <text class="box-text" x="130" y="616">HTTP range byte reads</text>
+
+  <rect class="method" x="430" y="525" width="300" height="118" rx="8"/>
+  <text class="box-title" x="455" y="558">ENVI Format Adapter</text>
+  <text class="box-text" x="455" y="588">Rust/WASM 解析器</text>
+  <text class="box-text" x="455" y="616">头文件 · interleave · 波长</text>
+
+  <rect class="method" x="800" y="525" width="285" height="118" rx="8"/>
+  <text class="box-title" x="825" y="558">CubeStore</text>
+  <text class="box-text" x="825" y="588">统一立方体服务</text>
+  <text class="box-text" x="825" y="616">元数据 · tiles · 光谱</text>
+
+  <rect class="runtime" x="1155" y="525" width="285" height="118" rx="8"/>
+  <text class="box-title" x="1180" y="558">Viewer Runtime</text>
+  <text class="box-text" x="1180" y="588">生命周期 · 事件</text>
+  <text class="box-text" x="1180" y="616">请求跟踪 · 过期任务隔离</text>
+
+  <rect class="runtime" x="1510" y="525" width="300" height="118" rx="8"/>
+  <text class="box-title" x="1535" y="558">Worker Scheduler</text>
+  <text class="box-text" x="1535" y="588">后台 tile / stat 任务</text>
+  <text class="box-text" x="1535" y="616">预加载 · 取消 · source 隔离</text>
+
+  <path class="arrow" d="M360 584 L430 584"/>
+  <path class="arrow" d="M730 584 L800 584"/>
+  <path class="arrow" d="M1085 584 L1155 584"/>
+  <path class="arrow" d="M1440 584 L1510 584"/>
+
+  <rect class="output" x="430" y="690" width="375" height="72" rx="8"/>
+  <text class="box-title" x="455" y="720">Renderer</text>
+  <text class="box-text" x="455" y="748">WebGPU 优先 · WebGL 兼容 · 拉伸/合成</text>
+
+  <rect class="output" x="890" y="690" width="380" height="72" rx="8"/>
+  <text class="box-title" x="915" y="720">CubeViewer API</text>
+  <text class="box-text" x="915" y="748">load · bands · header · spectra · coords</text>
+
+  <rect class="output" x="1355" y="690" width="360" height="72" rx="8"/>
+  <text class="box-title" x="1380" y="720">交互输出</text>
+  <text class="box-text" x="1380" y="748">伪 RGB · 波段 · 光谱 · 坐标</text>
+
+  <path class="arrow" d="M1298 643 C1298 680 660 653 620 690"/>
+  <path class="arrow" d="M1660 643 C1660 686 1100 650 1080 690"/>
+  <path class="arrow" d="M805 726 L890 726"/>
+  <path class="arrow" d="M1270 726 L1355 726"/>
+
+  <rect x="104" y="504" width="142" height="28" rx="6" fill="#2f8f6f"/>
+  <text class="tag" x="125" y="525">数据抽象</text>
+  <rect x="430" y="504" width="142" height="28" rx="6" fill="#c8752a"/>
+  <text class="tag" x="451" y="525">格式语义</text>
+  <rect x="1155" y="504" width="142" height="28" rx="6" fill="#7c5cc4"/>
+  <text class="tag" x="1176" y="525">运行调度</text>
+  <rect x="430" y="669" width="142" height="28" rx="6" fill="#be4b85"/>
+  <text class="tag" x="451" y="690">可视交互</text>
+
+  <rect class="panel" x="70" y="842" width="1780" height="160" rx="8"/>
+  <text class="section-title" x="100" y="883">3. 验证链路与科研产出</text>
+
+  <rect class="verify" x="105" y="915" width="410" height="58" rx="8"/>
+  <text class="box-title" x="130" y="943">可复现验证</text>
+  <text class="small" x="130" y="966">Node 22 · tests · matrix · benchmark</text>
+
+  <rect class="verify" x="600" y="915" width="410" height="58" rx="8"/>
+  <text class="box-title" x="625" y="943">实验证据</text>
+  <text class="small" x="625" y="966">fixtures · public sample · real ENVI cases</text>
+
+  <rect class="need" x="1095" y="915" width="360" height="58" rx="8"/>
+  <text class="box-title" x="1120" y="943">科研贡献</text>
+  <text class="small" x="1120" y="966">browser-native viewer kernel</text>
+
+  <rect class="need" x="1535" y="915" width="275" height="58" rx="8"/>
+  <text class="box-title" x="1560" y="943">扩展方向</text>
+  <text class="small" x="1560" y="966">plugins · remote runtime</text>
+
+  <path class="arrow" d="M515 944 L600 944"/>
+  <path class="arrow" d="M1010 944 L1095 944"/>
+  <path class="arrow" d="M1455 944 L1535 944"/>
+
+  <path class="soft" d="M1538 762 C1570 830 350 850 310 915"/>
+  <path class="soft" d="M1080 762 C1100 832 820 850 805 915"/>
+
+  <line class="divider" x1="70" y1="380" x2="1850" y2="380"/>
+  <line class="divider" x1="70" y1="818" x2="1850" y2="818"/>
+</svg>

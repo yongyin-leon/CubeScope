@@ -90,7 +90,7 @@ Recommended highlights for submission:
 
 - Browser-native ENVI viewer kernel for hyperspectral interaction
 - Rust/WASM parsing with worker-based browser runtime orchestration
-- WebGPU-first rendering with validated WebGL fallback and recovery
+- WebGPU-preferred rendering with validated WebGL fallback and recovery
 - Reproducible fixtures, packaging, benchmarks, and browser validation
 
 These bullets are also written into a separate draft file:

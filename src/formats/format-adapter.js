@@ -13,8 +13,8 @@
  * @typedef {{
  *   id: string,
  *   parseHeader: (input: HeaderParseInput) => Promise<Record<string, unknown>>,
- *   readTile?: (request: unknown) => Promise<unknown>,
- *   readSpectrum?: (request: unknown) => Promise<Float32Array | null>,
+ *   readTile: (request: unknown) => Promise<unknown>,
+ *   readSpectrum: (request: unknown) => Promise<Float32Array | null>,
  *   capabilities?: Record<string, unknown>,
  * }} FormatAdapter
  */
@@ -24,8 +24,14 @@
  * @returns {FormatAdapter}
  */
 export function assertFormatAdapter(adapter) {
-    if (!adapter || typeof adapter.id !== 'string' || typeof adapter.parseHeader !== 'function') {
-        throw new TypeError('A FormatAdapter must define "id" and "parseHeader(...)".');
+    if (
+        !adapter
+        || typeof adapter.id !== 'string'
+        || typeof adapter.parseHeader !== 'function'
+        || typeof adapter.readTile !== 'function'
+        || typeof adapter.readSpectrum !== 'function'
+    ) {
+        throw new TypeError('A FormatAdapter must define "id", "parseHeader(...)", "readTile(...)", and "readSpectrum(...)".');
     }
 
     return adapter;

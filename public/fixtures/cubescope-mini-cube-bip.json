@@ -1,0 +1,30 @@
+{
+  "id": "cubescope-mini-cube-bip",
+  "description": "Synthetic ENVI BIP cube for adapter and CubeStore boundary tests.",
+  "dimensions": {
+    "samples": 48,
+    "lines": 48,
+    "bands": 32
+  },
+  "interleave": "bip",
+  "dataType": "u16",
+  "byteOrder": "lsb",
+  "spatialReference": {
+    "projectionName": "UTM",
+    "pixelSize": {
+      "x": 30,
+      "y": 30
+    },
+    "referencePixel": {
+      "x": 1,
+      "y": 1
+    },
+    "referenceCoordinate": {
+      "x": 500000,
+      "y": 4100000
+    },
+    "coordinateSystemString": "WGS 84 / UTM zone 50N"
+  },
+  "generationCommand": "node scripts/generate-test-fixtures.mjs",
+  "license": "MIT"
+}

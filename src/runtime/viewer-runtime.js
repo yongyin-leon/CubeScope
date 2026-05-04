@@ -334,6 +334,7 @@ export class ViewerRuntime extends EventEmitter {
                 headerSource,
                 dataSource,
                 dataSourceDescriptor: this.#dataSourceDescriptor,
+                formatAdapter: this.#formatAdapter,
             });
             this.emit('log', 'Computing statistics for the initial view...');
             this.emit('statechange', { loading: true, message: 'Computing statistics...' });

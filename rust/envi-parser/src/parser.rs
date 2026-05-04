@@ -113,7 +113,77 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::header::{ByteOrder, DataType, Interleave};
     use super::parse_header_str;
+
+    #[test]
+    fn rejects_missing_required_fields() {
+        let result = parse_header_str(
+            "ENVI
+samples = 4
+lines = 3
+data type = 12
+interleave = bsq
+byte order = 0
+"
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_byte_order() {
+        let result = parse_header_str(
+            "ENVI
+samples = 4
+lines = 3
+bands = 2
+data type = 12
+interleave = bsq
+byte order = 9
+"
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn maps_core_data_type_and_interleave_fields() {
+        let header = parse_header_str(
+            "ENVI
+samples = 4
+lines = 3
+bands = 2
+data type = 4
+interleave = bip
+byte order = 1
+header offset = 128
+"
+        ).expect("header should parse");
+
+        assert_eq!(header.data_type, DataType::F32);
+        assert_eq!(header.interleave, Interleave::Bip);
+        assert_eq!(header.byte_order, ByteOrder::Msb);
+        assert_eq!(header.header_offset, 128);
+        assert_eq!(header.bytes_per_pixel, 4);
+    }
+
+    #[test]
+    fn defaults_byte_order_and_header_offset() {
+        let header = parse_header_str(
+            "ENVI
+samples = 4
+lines = 3
+bands = 2
+data type = 12
+interleave = bil
+"
+        ).expect("header should parse with defaults");
+
+        assert_eq!(header.byte_order, ByteOrder::Lsb);
+        assert_eq!(header.header_offset, 0);
+        assert_eq!(header.bytes_per_pixel, 2);
+    }
 
     #[test]
     fn parses_map_info_into_first_class_header_field() {

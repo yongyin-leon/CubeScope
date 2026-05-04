@@ -12,8 +12,8 @@ CubeScope is a browser-native software package for viewing ENVI hyperspectral
 datasets in modern web applications. The software is intentionally designed as
 an embeddable viewer kernel rather than as a monolithic analysis platform. Its
 current alpha release combines a Rust/WebAssembly ENVI parser, worker-based
-runtime orchestration, and hardware-accelerated rendering with a WebGPU-first
-path and a validated WebGL compatibility fallback. The software currently
+runtime orchestration, and hardware-accelerated rendering with a
+WebGPU-preferred path and a validated WebGL compatibility fallback. The software currently
 supports local ENVI loading, HTTP range-backed remote ENVI access, normalized
 metadata exposure, spectral probing, affine pixel-to-world mapping, and
 explicit runtime packaging for worker and WebAssembly assets.

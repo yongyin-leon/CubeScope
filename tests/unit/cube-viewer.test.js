@@ -14,6 +14,16 @@ class InternalViewerMock {
         this.unload = vi.fn(async () => {});
         this.setBands = vi.fn();
         this.updateConfig = vi.fn();
+        this.resetView = vi.fn();
+        this.zoomBy = vi.fn();
+        this.getViewportState = vi.fn(() => ({
+            scale: 1,
+            offsetX: 0,
+            offsetY: 0,
+            visibleBounds: { x: 0, y: 0, width: 48, height: 48 },
+            canvasWidth: 640,
+            canvasHeight: 480,
+        }));
         this.getSpectralProfile = vi.fn(async () => new Float32Array([1, 2, 3]));
         this.pixelToWorld = vi.fn((x, y) => ({ x: 500000 + x * 30, y: 4100000 - y * 30 }));
         this.worldToPixel = vi.fn((x, y) => ({ x: (x - 500000) / 30, y: (4100000 - y) / 30 }));
@@ -159,18 +169,50 @@ describe('CubeViewer public wrapper', () => {
         const internal = viewerInstances.at(-1);
         const headerSpy = vi.fn();
         const bandsSpy = vi.fn();
+        const viewSpy = vi.fn();
         const header = { bands: 32, samples: 48, lines: 48 };
         const bands = { r: 30, g: 20, b: 10 };
+        const viewport = {
+            scale: 1,
+            offsetX: 0,
+            offsetY: 0,
+            visibleBounds: { x: 0, y: 0, width: 48, height: 48 },
+            canvasWidth: 640,
+            canvasHeight: 480,
+        };
 
         viewer.on('header', headerSpy);
         viewer.on('bandschange', bandsSpy);
+        viewer.on('viewchange', viewSpy);
 
         internal.emit('headerloaded', header);
         internal.emit('bandschanged', bands);
+        internal.emit('viewchange', viewport);
 
         expect(viewer.getHeader()).toEqual(header);
         expect(headerSpy).toHaveBeenCalledWith(header);
         expect(bandsSpy).toHaveBeenCalledWith(bands);
+        expect(viewSpy).toHaveBeenCalledWith(viewport);
+    });
+
+    it('forwards viewport helpers through the public wrapper', () => {
+        const container = document.createElement('div');
+        const viewer = new CubeViewer(container);
+        const internal = viewerInstances.at(-1);
+
+        viewer.resetView();
+        viewer.zoomBy(1.5);
+
+        expect(internal.resetView).toHaveBeenCalledTimes(1);
+        expect(internal.zoomBy).toHaveBeenCalledWith(1.5, { x: 0, y: 0 });
+        expect(viewer.getViewportState()).toEqual({
+            scale: 1,
+            offsetX: 0,
+            offsetY: 0,
+            visibleBounds: { x: 0, y: 0, width: 48, height: 48 },
+            canvasWidth: 640,
+            canvasHeight: 480,
+        });
     });
 
     it('forwards unload and clears wrapper header state', async () => {

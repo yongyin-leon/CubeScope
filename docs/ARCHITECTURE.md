@@ -155,10 +155,9 @@ This is the main expansion seam for future algorithms.
 
 ## Minimum Concrete Interface Floor
 
-Before the next feature wave widens the implementation, the documented seams
-should become concrete internal interfaces in code.
-
-Suggested minimum floor:
+The documented seams now have a concrete internal floor in code. This floor is
+intentionally small: it proves the boundary before the project widens into
+additional formats or analysis runtimes.
 
 ```ts
 interface FormatAdapter {
@@ -201,6 +200,7 @@ Current concrete floor in source:
 - `src/sources/data-source.js`
 - `src/formats/format-adapter.js`
 - `src/formats/envi-format-adapter.js`
+- `src/formats/envi-cube-reader.js`
 - `src/store/cube-store.js`
 - `src/rendering/renderer-contract.js`
 - `src/rendering/webgpu-renderer.js`
@@ -222,45 +222,54 @@ Current alpha runtime adoption:
 
 1. `src/runtime/viewer-runtime.js` now crosses the load path through
    `DataSource -> FormatAdapter -> CubeStore`
-2. `src/runtime/viewer-runtime.js` now delegates draw calls and GPU tile
+2. `src/formats/envi-format-adapter.js` now provides concrete
+   `parseHeader`, `readTile`, and `readSpectrum` capabilities backed by shared
+   ENVI cube read helpers rather than by worker-private byte-layout logic
+3. `src/store/cube-store.js` now acts as the source-scoped cube read model for
+   metadata, tile reads, spectrum reads, sampled statistics, and affine
+   pixel/world mapping
+4. `src/runtime/viewer-worker.js` now reconstructs a `CubeStore` for request
+   execution and remains a protocol/cancellation boundary instead of owning
+   ENVI-specific tile and spectrum extraction code inline
+5. `src/runtime/viewer-runtime.js` now delegates draw calls and GPU tile
    resource ownership to renderer implementations behind
    `src/rendering/auto-renderer.js`
-3. viewport state, render-slot state, and transition-slot commits are now
+6. viewport state, render-slot state, and transition-slot commits are now
    isolated in `src/runtime/render-session.js`, so `viewer-runtime` no longer
    owns those details inline
-4. worker idle-pool state plus tile/stats/preload queue bookkeeping now flow
+7. worker idle-pool state plus tile/stats/preload queue bookkeeping now flow
    through `src/runtime/work-scheduler.js`, reducing how much source-scoped
    scheduling state remains inline inside `viewer-runtime`
-5. worker envelope normalization and response classification now flow through
+8. worker envelope normalization and response classification now flow through
    `src/runtime/worker-message-router.js`, so `viewer-runtime` mainly handles
    the stateful side effects rather than inline message decoding
-6. reaction planning for stats completion, tile completion, and tile error now
+9. reaction planning for stats completion, tile completion, and tile error now
    flows through `src/runtime/runtime-reaction-plan.js`, so `viewer-runtime`
    no longer decides those runtime reactions inline after route classification
-7. tile/stats/preload dispatch loops now flow through
+10. tile/stats/preload dispatch loops now flow through
    `src/runtime/runtime-work-executor.js`, so `viewer-runtime` no longer owns
    those worker execution loops inline
-8. source teardown, metadata summary creation, and renderer device-loss
+11. source teardown, metadata summary creation, and renderer device-loss
    recovery now flow through `src/runtime/runtime-lifecycle-controller.js`, so
    `viewer-runtime` no longer owns those lifecycle paths inline
-9. band-switch planning, transition kickoff, and transition frame finalization
+12. band-switch planning, transition kickoff, and transition frame finalization
    now flow through `src/runtime/runtime-transition-controller.js`, so
    `viewer-runtime` no longer owns that transition orchestration inline
-10. canvas resize, visible-tile calculation, and draw-loop scheduling now flow
+13. canvas resize, visible-tile calculation, and draw-loop scheduling now flow
    through `src/runtime/runtime-view-controller.js`, so `viewer-runtime` no
    longer owns that view-update orchestration inline
-11. outgoing worker request ids, envelope construction, and command payload
+14. outgoing worker request ids, envelope construction, and command payload
    shaping now flow through `src/runtime/worker-dispatch-policy.js`, so
    `viewer-runtime` no longer assembles each worker message inline
-12. worker creation, init handshake, fatal-error wiring, broadcast, and
+15. worker creation, init handshake, fatal-error wiring, broadcast, and
    termination now flow through `src/runtime/worker-pool.js`, so
    `viewer-runtime` no longer owns the raw worker lifecycle inline
-13. initial-load timing, band-switch timing, band-stats readiness planning, and
+16. initial-load timing, band-switch timing, band-stats readiness planning, and
    preload planning now flow through `src/runtime/runtime-policy.js`, so
    `viewer-runtime` no longer owns that runtime policy state inline
-14. renderer input is frozen as an internal contract helper before deeper
+17. renderer input is frozen as an internal contract helper before deeper
    renderer/store separation work in the next phase
-15. ENVI `map info` and `coordinate system string` now normalize into a stable
+18. ENVI `map info` and `coordinate system string` now normalize into a stable
    `spatialReference` contract, with affine pixel/world mapping exposed without
    entering renderer reprojection
 

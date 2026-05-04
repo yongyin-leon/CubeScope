@@ -128,6 +128,22 @@ type CubeHeader = {
   spatialReference?: CubeSpatialReference
 }
 
+type ViewerVisibleBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type ViewerViewportState = {
+  scale: number
+  offsetX: number
+  offsetY: number
+  visibleBounds: ViewerVisibleBounds
+  canvasWidth: number
+  canvasHeight: number
+}
+
 interface CubeViewer {
   init(): Promise<void>
   load(source: LoadSource): Promise<void>
@@ -138,6 +154,9 @@ interface CubeViewer {
   getHeader(): CubeHeader | null
   setBands(bands: RGBBands): void
   updateConfig(next: RuntimeConfig): void
+  resetView(): void
+  zoomBy(factor: number): void
+  getViewportState(): ViewerViewportState | null
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>
   pixelToWorld(x: number, y: number): CubeCoordinate | null
   worldToPixel(x: number, y: number): CubeCoordinate | null
@@ -222,6 +241,7 @@ type ViewerEventName =
   | 'performance'
   | 'error'
   | 'image-clicked'
+  | 'viewchange'
 ```
 
 Compatibility aliases still forwarded by the wrapper:
@@ -245,6 +265,7 @@ Recommended payload patterns:
 - `performance` -> `{ name: 'timeToInitialView' | 'bandSwitchTime', value, unit }`
 - `error` -> `string`
 - `image-clicked` -> `{ x, y }`
+- `viewchange` -> `ViewerViewportState | null`
 - `pixelToWorld(...)` / `worldToPixel(...)` -> zero-based image pixel space
   mapped through the source affine transform when available
 - `metadata` -> source/file metadata summary

@@ -112,6 +112,22 @@ export type ViewerProgressEvent = {
   progress: number;
 };
 
+export type ViewerVisibleBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type ViewerViewportState = {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  visibleBounds: ViewerVisibleBounds;
+  canvasWidth: number;
+  canvasHeight: number;
+};
+
 export type ViewerEventMap = {
   ready: void;
   loadstart: void;
@@ -126,6 +142,7 @@ export type ViewerEventMap = {
   log: string;
   destroyed: void;
   'image-clicked': { x: number; y: number };
+  viewchange: ViewerViewportState | null;
   metadata: Record<string, unknown>;
   statechange: { loading: boolean; message?: string };
 };
@@ -140,6 +157,9 @@ export declare class CubeViewer {
   unload(): Promise<void>;
   setBands(bands: ViewerBands): void;
   updateConfig(config?: ViewerRuntimeConfig): void;
+  resetView(): void;
+  zoomBy(factor: number): void;
+  getViewportState(): ViewerViewportState | null;
   getHeader(): CubeHeader | null;
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>;
   pixelToWorld(x: number, y: number): CubeCoordinate | null;

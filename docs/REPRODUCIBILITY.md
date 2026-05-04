@@ -114,6 +114,9 @@ npm run verify:alpha
   choices.
 - That fixture now includes ENVI `map info` and `coordinate system string`
   fields so local validation covers the spatial-reference normalization path.
+- The fixture generator also emits deterministic BIL and BIP variants for
+  adapter/CubeStore boundary tests, while the original BSQ
+  `cubescope-mini-cube` remains the smoke and benchmark baseline.
 - The same fixture is mirrored into `public/fixtures/`, which gives the local
   benchmark and smoke automation a deterministic same-origin `envi-http`
   target with `HTTP range` reads and no external dependency.

@@ -15,8 +15,9 @@ export class CubeStore {
     #headerSource;
     #dataSource;
     #dataSourceDescriptor;
+    #formatAdapter;
 
-    constructor({ sourceId, header, headerBytes, headerSource, dataSource, dataSourceDescriptor }) {
+    constructor({ sourceId, header, headerBytes, headerSource, dataSource, dataSourceDescriptor, formatAdapter }) {
         this.#sourceId = sourceId;
         this.#header = header ?? null;
         this.#headerBytes = headerBytes ?? null;
@@ -24,6 +25,7 @@ export class CubeStore {
         this.#dataSource = dataSource ?? null;
         this.#dataSourceDescriptor = dataSourceDescriptor
             ?? (dataSource ? serializeDataSource(dataSource) : null);
+        this.#formatAdapter = formatAdapter ?? null;
     }
 
     getSourceId() {
@@ -56,6 +58,48 @@ export class CubeStore {
             : null;
     }
 
+    async getTile(request = {}) {
+        if (!this.#formatAdapter?.readTile || !this.#header || !this.#headerBytes || !this.#dataSource) {
+            return null;
+        }
+
+        return this.#formatAdapter.readTile({
+            ...request,
+            header: this.#header,
+            headerBytes: this.#headerBytes,
+            dataSource: this.#dataSource,
+            sourceId: this.#sourceId,
+        });
+    }
+
+    async getSpectrum(request = {}) {
+        if (!this.#formatAdapter?.readSpectrum || !this.#header || !this.#headerBytes || !this.#dataSource) {
+            return null;
+        }
+
+        return this.#formatAdapter.readSpectrum({
+            ...request,
+            header: this.#header,
+            headerBytes: this.#headerBytes,
+            dataSource: this.#dataSource,
+            sourceId: this.#sourceId,
+        });
+    }
+
+    async calculateStats(request = {}) {
+        if (!this.#formatAdapter?.calculateStats || !this.#header || !this.#headerBytes || !this.#dataSource) {
+            return null;
+        }
+
+        return this.#formatAdapter.calculateStats({
+            ...request,
+            header: this.#header,
+            headerBytes: this.#headerBytes,
+            dataSource: this.#dataSource,
+            sourceId: this.#sourceId,
+        });
+    }
+
     pixelToWorld(x, y) {
         return mapPixelToWorld(this.#header, x, y);
     }
@@ -70,5 +114,6 @@ export class CubeStore {
         this.#headerSource = null;
         this.#dataSource = null;
         this.#dataSourceDescriptor = null;
+        this.#formatAdapter = null;
     }
 }

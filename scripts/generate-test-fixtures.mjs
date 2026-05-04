@@ -67,9 +67,73 @@ const manifest = {
     license: 'MIT',
 };
 
+function createPixelBytesForInterleave(interleave) {
+    const bytes = Buffer.alloc(totalPixels * 2);
+
+    if (interleave === 'bsq') {
+        for (let band = 0; band < bands; band += 1) {
+            for (let y = 0; y < lines; y += 1) {
+                for (let x = 0; x < samples; x += 1) {
+                    const flatIndex = band * samples * lines + y * samples + x;
+                    const value = (band + 1) * 100 + ((x * 13 + y * 17 + band * 7) % 97);
+                    bytes.writeUInt16LE(value, flatIndex * 2);
+                }
+            }
+        }
+        return bytes;
+    }
+
+    if (interleave === 'bil') {
+        let flatIndex = 0;
+        for (let y = 0; y < lines; y += 1) {
+            for (let band = 0; band < bands; band += 1) {
+                for (let x = 0; x < samples; x += 1) {
+                    const value = (band + 1) * 100 + ((x * 13 + y * 17 + band * 7) % 97);
+                    bytes.writeUInt16LE(value, flatIndex * 2);
+                    flatIndex += 1;
+                }
+            }
+        }
+        return bytes;
+    }
+
+    let flatIndex = 0;
+    for (let y = 0; y < lines; y += 1) {
+        for (let x = 0; x < samples; x += 1) {
+            for (let band = 0; band < bands; band += 1) {
+                const value = (band + 1) * 100 + ((x * 13 + y * 17 + band * 7) % 97);
+                bytes.writeUInt16LE(value, flatIndex * 2);
+                flatIndex += 1;
+            }
+        }
+    }
+    return bytes;
+}
+
+function writeInterleaveVariant(interleave) {
+    const variantBaseName = `${baseName}-${interleave}`;
+    const variantHdrText = hdrText.replace('interleave = bsq', `interleave = ${interleave}`);
+    const variantBytes = createPixelBytesForInterleave(interleave);
+    const variantManifest = {
+        ...manifest,
+        id: variantBaseName,
+        description: `Synthetic ENVI ${interleave.toUpperCase()} cube for adapter and CubeStore boundary tests.`,
+        interleave,
+    };
+
+    writeFileSync(resolve(fixtureDir, `${variantBaseName}.hdr`), variantHdrText);
+    writeFileSync(resolve(fixtureDir, `${variantBaseName}.img`), variantBytes);
+    writeFileSync(resolve(fixtureDir, `${variantBaseName}.json`), `${JSON.stringify(variantManifest, null, 2)}\n`);
+    writeFileSync(resolve(publicFixtureDir, `${variantBaseName}.hdr`), variantHdrText);
+    writeFileSync(resolve(publicFixtureDir, `${variantBaseName}.img`), variantBytes);
+    writeFileSync(resolve(publicFixtureDir, `${variantBaseName}.json`), `${JSON.stringify(variantManifest, null, 2)}\n`);
+}
+
 writeFileSync(hdrPath, hdrText);
 writeFileSync(imgPath, pixelBytes);
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 writeFileSync(publicHdrPath, hdrText);
 writeFileSync(publicImgPath, pixelBytes);
 writeFileSync(publicManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+writeInterleaveVariant('bil');
+writeInterleaveVariant('bip');

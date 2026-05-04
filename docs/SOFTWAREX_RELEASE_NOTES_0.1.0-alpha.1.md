@@ -8,7 +8,7 @@ not a Git tag or public release by itself.
 CubeScope `0.1.0-alpha.1` is a browser-native, local-first viewer kernel for
 ENVI hyperspectral datasets. It provides an embeddable JavaScript API backed by
 Rust/WebAssembly ENVI parsing, Web Worker runtime orchestration, and
-hardware-accelerated rendering with a WebGPU-first path and verified WebGL
+hardware-accelerated rendering with a WebGPU-preferred path and verified WebGL
 fallback.
 
 ## Main Capabilities
@@ -54,8 +54,8 @@ Deterministic fixture benchmark snapshot:
 
 | Scenario | Header parse | Initial view | Band switch |
 | --- | ---: | ---: | ---: |
-| Local file/blob | `6.5 ms` | `17.1 ms` | `3.0 ms` |
-| Same-origin HTTP range | `5.5 ms` | `21.3 ms` | `5.5 ms` |
+| Local file/blob | `6.5 ms` | `26.2 ms` | `8.4 ms` |
+| Same-origin HTTP range | `6.1 ms` | `29.9 ms` | `15.2 ms` |
 
 These values are local validation outputs rather than hardware-independent
 comparative performance claims.
@@ -65,9 +65,9 @@ comparative performance claims.
 `npm pack` verification produced:
 
 - Tarball: `cubescope-web-0.1.0-alpha.1.tgz`
-- Packed size: `226044` bytes
-- Unpacked size: `892369` bytes
-- Entries: `17`
+- Packed size: `264121` bytes
+- Unpacked size: `1291282` bytes
+- Entries: `23`
 
 Verified public exports:
 
@@ -84,6 +84,8 @@ Verified package assets:
 - `dist/fixtures/cubescope-mini-cube.hdr`
 - `dist/fixtures/cubescope-mini-cube.img`
 - `dist/fixtures/cubescope-mini-cube.json`
+- `dist/fixtures/cubescope-mini-cube-bil.*`
+- `dist/fixtures/cubescope-mini-cube-bip.*`
 - `dist/samples/remote-samples.json`
 - `CITATION.cff`
 

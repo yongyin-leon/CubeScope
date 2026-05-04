@@ -117,11 +117,14 @@ The main architectural seams are `DataSource`, `FormatAdapter`, `CubeStore`,
 `Renderer`, and the runtime orchestration shell. `DataSource` is responsible
 for byte access only, currently through local file/blob reads and an
 HTTP-range remote path. `FormatAdapter` interprets ENVI source bytes, parses
-metadata, and supports tile and spectrum extraction. `CubeStore` exposes
-normalized metadata and cube-oriented services such as tile reads, spectrum
-reads, and pixel/world mapping. `Renderer` consumes prepared raster layers and
-view state and is explicitly separated from source parsing and format
-semantics.
+metadata, and now provides concrete tile and spectrum extraction methods backed
+by shared ENVI cube-read helpers. `CubeStore` exposes normalized metadata and
+cube-oriented services such as tile reads, spectrum reads, sampled statistics,
+and pixel/world mapping. Worker requests rebuild this store and execute through
+that read model, so the worker remains a protocol and cancellation boundary
+rather than the owner of ENVI byte-layout logic. `Renderer` consumes prepared
+raster layers and view state and is explicitly separated from source parsing
+and format semantics.
 
 ![CubeScope browser-native ENVI viewer architecture.](figures/softwarex-architecture.png)
 
@@ -137,8 +140,8 @@ rendering in a practical way. ENVI parsing is anchored in a Rust/WebAssembly
 component that serves as the authoritative parser layer for the current format
 support. Background work is routed through Web Workers using explicit message
 envelopes and source-aware request tracking, which helps isolate stale work
-when sources change. Rendering is WebGPU-first but retains a validated WebGL
-compatibility path. In `auto` mode, the viewer prefers WebGPU but can recover
+when sources change. Rendering is WebGPU-preferred but retains a validated WebGL
+compatibility and recovery path. In `auto` mode, the viewer prefers WebGPU but can recover
 through WebGL after a device-loss event, including cases where the browser
 requires the render canvas to be recreated before a new graphics context can be
 used.

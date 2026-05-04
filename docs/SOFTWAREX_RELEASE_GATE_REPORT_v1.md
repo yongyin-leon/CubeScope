@@ -1,6 +1,6 @@
 # SoftwareX Release Gate Report v1
 
-Generated from `npm run verify:alpha` on `2026-04-24`.
+Generated from `npm run verify:alpha` on `2026-05-04`.
 
 ## Verdict
 
@@ -36,9 +36,10 @@ items and repository-publication decision.
 
 | Test group | Result |
 | --- | --- |
-| Unit tests | `29` files, `113` tests passed |
+| Unit tests | `31` files, `123` tests passed |
 | Smoke tests | `4` tests passed |
 | Sample catalog smoke | `1` test passed |
+| Rust parser tests | `6` tests passed |
 | Browser matrix | `2/2` scenarios passed, `0` warnings |
 
 ## Benchmark Snapshot
@@ -47,8 +48,8 @@ The deterministic fixture was `48 x 48 x 32` with `bsq` interleave.
 
 | Scenario | Header parse | Initial view | Band switch |
 | --- | ---: | ---: | ---: |
-| Local file/blob | `6.5 ms` | `17.1 ms` | `3.0 ms` |
-| Same-origin HTTP range | `5.5 ms` | `21.3 ms` | `5.5 ms` |
+| Local file/blob | `6.5 ms` | `26.2 ms` | `8.4 ms` |
+| Same-origin HTTP range | `6.1 ms` | `29.9 ms` | `15.2 ms` |
 
 These values are local validation outputs and should not be presented as a
 hardware-independent comparative benchmark.
@@ -60,10 +61,10 @@ hardware-independent comparative benchmark.
 | Item | Value |
 | --- | --- |
 | Tarball | `cubescope-web-0.1.0-alpha.1.tgz` |
-| Packed size | `226044` bytes |
-| Unpacked size | `892369` bytes |
-| Entry count | `17` |
-| Integrity | `sha512-DAX0fj409MAPAkyu7/rAER1ibVTNSFrk86uSTeNPA9nNhniFtrSqd7n8jxpFEoU94nl/plGPSFcWf6NuwtFwSQ==` |
+| Packed size | `264121` bytes |
+| Unpacked size | `1291282` bytes |
+| Entry count | `23` |
+| Integrity | `sha512-dbhx3z327Ee1sXaMnzJPXEJck1571xnAM8FsiV7h0HaN4zzcJFZ0SJuKGSaM2ooU85Ivj6qIfLRAe3gyzzptKQ==` |
 
 Verified public exports:
 
@@ -80,6 +81,8 @@ Verified package assets:
 - `dist/fixtures/cubescope-mini-cube.hdr`
 - `dist/fixtures/cubescope-mini-cube.img`
 - `dist/fixtures/cubescope-mini-cube.json`
+- `dist/fixtures/cubescope-mini-cube-bil.*`
+- `dist/fixtures/cubescope-mini-cube-bip.*`
 - `dist/samples/remote-samples.json`
 - `CITATION.cff`
 

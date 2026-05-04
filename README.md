@@ -92,6 +92,10 @@ benchmark 和可复现截图：
 - 生成命令：`npm run fixtures:generate`
 - manifest：`test-data/fixtures/cubescope-mini-cube.json`
 
+同一生成命令也会生成 BIL/BIP 布局变体，用于验证内部
+`FormatAdapter` 和 `CubeStore` 读模型边界；主 smoke/benchmark 基线仍保持为
+上面的 BSQ fixture。
+
 ## SDK 使用方式
 
 alpha 阶段的公开 API 仍然保持类式接口。
@@ -418,6 +422,10 @@ and reproducible screenshots:
 - byte order: `lsb`
 - generation command: `npm run fixtures:generate`
 - manifest: `test-data/fixtures/cubescope-mini-cube.json`
+
+The same generator also emits BIL/BIP layout variants for internal
+`FormatAdapter` and `CubeStore` read-model validation; the primary smoke and
+benchmark baseline remains the BSQ fixture above.
 
 ## SDK Usage
 

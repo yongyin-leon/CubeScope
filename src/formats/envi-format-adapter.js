@@ -4,6 +4,11 @@
 
 import { assertFormatAdapter } from './format-adapter.js';
 import { normalizeCubeHeader } from './cube-header.js';
+import {
+    calculateSampledBandStats,
+    readRenderedRgbTile,
+    readSpectrumAtPixel,
+} from './envi-cube-reader.js';
 
 function normalizeHeaderBytes(value) {
     if (value instanceof Uint8Array) {
@@ -47,6 +52,106 @@ export function createEnviFormatAdapter({ getWasmModule } = {}) {
             const header = normalizeEnviHeader(reader.getHeaderAsJsObject());
 
             return header;
+        },
+        async readTile({
+            headerBytes,
+            dataSource,
+            header,
+            tile,
+            bands,
+            globalStats,
+            tileSize,
+        } = {}) {
+            const bytes = normalizeHeaderBytes(headerBytes);
+
+            if (!bytes) {
+                throw new TypeError('ENVI tile reading requires headerBytes.');
+            }
+
+            const wasmModule = await getWasmModule();
+            const { EnviReader, normalizeBandInPlaceWithStats } = wasmModule ?? {};
+
+            if (typeof EnviReader !== 'function') {
+                throw new Error('ENVI parser module is missing EnviReader.');
+            }
+
+            const reader = new EnviReader(bytes);
+
+            return readRenderedRgbTile({
+                enviReader: reader,
+                dataSource,
+                header,
+                tile,
+                bands,
+                globalStats,
+                normalizeBandInPlaceWithStats,
+                tileSize,
+            });
+        },
+        async readSpectrum({
+            headerBytes,
+            dataSource,
+            header,
+            x,
+            y,
+            tileSize,
+        } = {}) {
+            const bytes = normalizeHeaderBytes(headerBytes);
+
+            if (!bytes) {
+                throw new TypeError('ENVI spectrum reading requires headerBytes.');
+            }
+
+            const wasmModule = await getWasmModule();
+            const { EnviReader } = wasmModule ?? {};
+
+            if (typeof EnviReader !== 'function') {
+                throw new Error('ENVI parser module is missing EnviReader.');
+            }
+
+            const reader = new EnviReader(bytes);
+
+            return readSpectrumAtPixel({
+                enviReader: reader,
+                dataSource,
+                header,
+                x,
+                y,
+                tileSize,
+            });
+        },
+        async calculateStats({
+            headerBytes,
+            dataSource,
+            header,
+            bands,
+            sampleTiles,
+            tileSize,
+        } = {}) {
+            const bytes = normalizeHeaderBytes(headerBytes);
+
+            if (!bytes) {
+                throw new TypeError('ENVI statistics require headerBytes.');
+            }
+
+            const wasmModule = await getWasmModule();
+            const { EnviReader, calculateStatistics } = wasmModule ?? {};
+
+            if (typeof EnviReader !== 'function') {
+                throw new Error('ENVI parser module is missing EnviReader.');
+            }
+
+            const reader = new EnviReader(bytes);
+
+            return calculateSampledBandStats({
+                enviReader: reader,
+                dataSource,
+                header,
+                bands,
+                sampleTiles,
+                calculateStatistics,
+                tileSize,
+            });
         },
     });
 }
