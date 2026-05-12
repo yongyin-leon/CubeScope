@@ -36,11 +36,11 @@ items and repository-publication decision.
 
 | Test group | Result |
 | --- | --- |
-| Unit tests | `31` files, `123` tests passed |
+| Unit tests | `31` files, `129` tests passed |
 | Smoke tests | `4` tests passed |
 | Sample catalog smoke | `1` test passed |
 | Rust parser tests | `6` tests passed |
-| Browser matrix | `2/2` scenarios passed, `0` warnings |
+| Browser matrix | Chromium, Firefox, and WebKit `4/4` scenarios passed, `0` warnings |
 
 ## Benchmark Snapshot
 

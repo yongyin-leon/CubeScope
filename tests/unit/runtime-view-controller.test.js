@@ -27,6 +27,7 @@ describe('ViewerRuntimeViewController', () => {
         const controller = new ViewerRuntimeViewController();
         const renderSession = {
             calculateVisibleTiles: () => [{ x: 0, y: 0 }],
+            getTileSize: () => 256,
             getViewState: () => ({ scale: 1, offsetX: 0, offsetY: 0 }),
             isTransitioning: () => false,
             markActiveTilePending: () => true,
@@ -43,10 +44,13 @@ describe('ViewerRuntimeViewController', () => {
         const first = controller.updateAndDraw({
             header: { samples: 512, lines: 512, bands: 32 },
             renderer: {
-                render: () => ({
-                    rendererReady: true,
-                    missingTiles: [{ x: 1, y: 0 }],
-                }),
+                render: (input) => {
+                    expect(input.tileSize).toBe(256);
+                    return {
+                        rendererReady: true,
+                        missingTiles: [{ x: 1, y: 0 }],
+                    };
+                },
             },
             sourceId: 7,
             renderSession,

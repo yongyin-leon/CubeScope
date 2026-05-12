@@ -77,6 +77,11 @@ type CubeDataType =
   | 'i64'
   | 'u64'
 
+// Complex-valued ENVI headers are recognized as metadata, but v0.1 alpha
+// rendering/statistics/spectrum extraction rejects them with an explicit
+// unsupported-data-type error. Convert complex cubes to a real-valued
+// representation before loading.
+
 type CubeBandDisplayRole = 'red' | 'green' | 'blue' | 'nir' | 'gray' | 'other'
 
 type CubeBandMetadata = {
@@ -144,6 +149,20 @@ type ViewerViewportState = {
   canvasHeight: number
 }
 
+type ViewerPixelProbeSpectrumPoint = {
+  band: number
+  wavelength?: number
+  value: number
+}
+
+type ViewerPixelProbeSnapshot = {
+  pixel: CubeCoordinate
+  world: CubeCoordinate | null
+  spectrum: ViewerPixelProbeSpectrumPoint[]
+  header: Pick<CubeHeader, 'samples' | 'lines' | 'bands' | 'interleave' | 'dataType' | 'byteOrder'>
+  viewport: ViewerViewportState | null
+}
+
 interface CubeViewer {
   init(): Promise<void>
   load(source: LoadSource): Promise<void>
@@ -158,6 +177,7 @@ interface CubeViewer {
   zoomBy(factor: number): void
   getViewportState(): ViewerViewportState | null
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>
+  getPixelProbe(x: number, y: number): Promise<ViewerPixelProbeSnapshot | null>
   pixelToWorld(x: number, y: number): CubeCoordinate | null
   worldToPixel(x: number, y: number): CubeCoordinate | null
 

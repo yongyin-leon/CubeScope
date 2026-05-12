@@ -34,10 +34,10 @@ Latest local release gate: `npm run verify:alpha` on `2026-04-24`.
 
 | Gate | Status |
 | --- | --- |
-| Unit tests | `113/113` passed |
+| Unit tests | `129/129` passed |
 | Smoke tests | `4/4` passed |
 | Sample catalog smoke | `1/1` passed |
-| Browser matrix | `2/2` scenarios passed |
+| Browser matrix | Chromium, Firefox, and WebKit `4/4` scenarios passed |
 | Local alpha gate | `passed` |
 | Package-consumer verification | `passed` |
 | Node 22 local runtime | `passed` |

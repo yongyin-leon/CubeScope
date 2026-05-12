@@ -199,6 +199,9 @@ instead of delaying it.
 - completed: demo-only panels moved under `examples/demo/*`
 - completed: wrapper now exposes stable aliases for `header`, `bandschange`, runtime `updateConfig()`, and `unload()`
 - completed: typed worker request/response envelopes landed in `src/protocol/worker-protocol.js`, with `sourceId` and `requestId` promoted to first-class fields
+- completed: worker request/response envelopes now carry an explicit
+  `protocolVersion`, and unsupported versions are rejected before runtime
+  state mutation
 - completed: `load({ kind: 'envi-local', headerFile, dataFile })` is now the primary public load entry, with `loadFile(...)` kept as compatibility alias
 - completed: runtime request tracking and worker-side `cancel` suppression now define explicit source invalidation behavior for tile, stats, and spectrum work
 - completed: stale worker responses are isolated by `sourceId`, and source-scoped caches reset on source switch
@@ -237,6 +240,8 @@ instead of delaying it.
   scheduling now flow through `src/runtime/runtime-view-controller.js`,
   reducing how much view-update orchestration still lives inline inside
   `src/runtime/viewer-runtime.js`
+- completed: renderer input now carries explicit `tileSize`, removing the
+  historical renderer-side `512` tile-size assumption from WebGPU and WebGL
 - completed: outgoing worker request ids, envelopes, and payload shaping now
   flow through `src/runtime/worker-dispatch-policy.js`, reducing how much
   dispatch construction logic still lives inline inside `src/runtime/viewer-runtime.js`
@@ -250,6 +255,8 @@ instead of delaying it.
 - completed: `CubeHeader` normalization now flows through
   `src/formats/cube-header.js`, fixing `interleave`, `dataType`, and
   `byteOrder` into a stable public metadata contract
+- completed: `CubeViewer.getPixelProbe(...)` now exposes a JSON-safe probe
+  snapshot for pixel/world/spectrum provenance and demo export paths
 - next focus: close release-facing reproducibility and metadata gates without
   widening the public API
 
@@ -311,15 +318,20 @@ instead of delaying it.
 - completed: a local Chromium browser-matrix report now records observed
   renderer behavior for both `rendererPreference=webgl` and
   `rendererPreference=auto` against the deterministic local fixture
+- completed: the browser-matrix report now records requested browsers,
+  verified browsers, optional skipped scenarios, and required failures instead
+  of implying untested compatibility
+- completed: local Playwright browser installation now verifies Chromium,
+  Firefox, and WebKit WebGL paths against the deterministic fixture, with
+  Chromium additionally exercising `auto` WebGPU-to-WebGL recovery
 - completed: the runtime now recreates the render canvas when a browser requires
   a fresh drawing context to recover from WebGPU into the WebGL compatibility
   path during auto-renderer recovery
 - completed: one stable public remote sample beyond the repo-local HTTP
   fixture now ships in the sample catalog and passes the public-tier browser
   validation path
-- pending: broader browser-matrix hardening for the auto renderer beyond the
-  new session-level WebGPU -> WebGL degrade path, especially across real
-  browser/device combinations
+- pending: repeat this browser-matrix evidence in public CI or external
+  browser-lab runs once the repository is public
 
 ### Exit criteria
 
@@ -519,7 +531,8 @@ Current liabilities:
 - one stable public remote sample beyond the repo-local HTTP fixture is now
   documented and shipped in the sample catalog
 - the auto renderer still needs broader browser-matrix hardening, especially
-  for WebGPU recovery in unstable headless environments
+  for WebGPU recovery in unstable headless environments; current local reports
+  verify Chromium, Firefox, and WebKit WebGL behavior and Chromium auto recovery
 - Node 22 on a matching local runtime has now been confirmed before the first
   public alpha tag
 

@@ -20,6 +20,8 @@ Status snapshot:
 - [x] `npm run test` succeeds
 - [x] `npm run report:toolchain` writes `output/toolchain/local-toolchain.json`
 - [x] `npm run report:browser-matrix` writes `output/browser-matrix/latest.json`
+  with Chromium, Firefox, and WebKit scenarios verified when local Playwright
+  browsers are installed
 - [x] `npm run benchmark` writes `output/benchmark/latest.json`
 - [x] `npm run validate:samples` writes `output/samples/latest.json`
 - [x] public-tier sample validation writes `output/samples/public-latest.json`

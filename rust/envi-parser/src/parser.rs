@@ -27,7 +27,7 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
                 multiline_buffer.push(' ');
             }
         } else if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim().to_string();
+            let key = key.trim().to_ascii_lowercase();
             let value = value.trim();
 
             if value.starts_with('{') {
@@ -56,25 +56,37 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
             .remove(key)
             .ok_or_else(|| EnviError::MissingRequiredField(key.to_string()))
     };
-    
+
     let get_optional_field = |fields: &mut HashMap<String, String>, key: &str, default: &str| {
         fields.remove(key).unwrap_or_else(|| default.to_string())
     };
 
-    let samples: u32 = get_and_remove_required_field("samples")?.parse().map_err(|e| EnviError::from_parse_error(e, "samples"))?;
-    let lines: u32 = get_and_remove_required_field("lines")?.parse().map_err(|e| EnviError::from_parse_error(e, "lines"))?;
-    let bands: u32 = get_and_remove_required_field("bands")?.parse().map_err(|e| EnviError::from_parse_error(e, "bands"))?;
-    
-    let data_type_code: i32 = get_and_remove_required_field("data type")?.parse().map_err(|e| EnviError::from_parse_error(e, "data type"))?;
+    let samples: u32 = get_and_remove_required_field("samples")?
+        .parse()
+        .map_err(|e| EnviError::from_parse_error(e, "samples"))?;
+    let lines: u32 = get_and_remove_required_field("lines")?
+        .parse()
+        .map_err(|e| EnviError::from_parse_error(e, "lines"))?;
+    let bands: u32 = get_and_remove_required_field("bands")?
+        .parse()
+        .map_err(|e| EnviError::from_parse_error(e, "bands"))?;
+
+    let data_type_code: i32 = get_and_remove_required_field("data type")?
+        .parse()
+        .map_err(|e| EnviError::from_parse_error(e, "data type"))?;
     let data_type = DataType::from_code(data_type_code)?;
-    
+
     let interleave_str = get_and_remove_required_field("interleave")?;
     let interleave = Interleave::from_str(&interleave_str)?;
-    
-    let byte_order_code: i32 = get_optional_field(&mut processed_fields, "byte order", "0").parse().map_err(|e| EnviError::from_parse_error(e, "byte order"))?;
+
+    let byte_order_code: i32 = get_optional_field(&mut processed_fields, "byte order", "0")
+        .parse()
+        .map_err(|e| EnviError::from_parse_error(e, "byte order"))?;
     let byte_order = ByteOrder::from_code(byte_order_code)?;
 
-    let header_offset: usize = get_optional_field(&mut processed_fields, "header offset", "0").parse().map_err(|e| EnviError::from_parse_error(e, "header offset"))?;
+    let header_offset: usize = get_optional_field(&mut processed_fields, "header offset", "0")
+        .parse()
+        .map_err(|e| EnviError::from_parse_error(e, "header offset"))?;
 
     let description = processed_fields.remove("description");
     let file_type = processed_fields.remove("file type");
@@ -84,12 +96,12 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
 
     let wavelength = processed_fields.remove("wavelength").and_then(|s| {
         s.split(',')
-         .map(|v| v.trim().parse::<f64>())
-         .collect::<Result<Vec<f64>, _>>()
-         .ok()
+            .map(|v| v.trim().parse::<f64>())
+            .collect::<Result<Vec<f64>, _>>()
+            .ok()
     });
-    
-    let custom_fields = processed_fields; 
+
+    let custom_fields = processed_fields;
     let bytes_per_pixel = data_type.byte_size();
 
     Ok(EnviHeader {
@@ -113,8 +125,8 @@ pub fn parse_header_str(content: &str) -> Result<EnviHeader, EnviError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::header::{ByteOrder, DataType, Interleave};
     use super::parse_header_str;
+    use crate::header::{ByteOrder, DataType, Interleave};
 
     #[test]
     fn rejects_missing_required_fields() {
@@ -125,7 +137,7 @@ lines = 3
 data type = 12
 interleave = bsq
 byte order = 0
-"
+",
         );
 
         assert!(result.is_err());
@@ -141,7 +153,7 @@ bands = 2
 data type = 12
 interleave = bsq
 byte order = 9
-"
+",
         );
 
         assert!(result.is_err());
@@ -158,14 +170,40 @@ data type = 4
 interleave = bip
 byte order = 1
 header offset = 128
-"
-        ).expect("header should parse");
+",
+        )
+        .expect("header should parse");
 
         assert_eq!(header.data_type, DataType::F32);
         assert_eq!(header.interleave, Interleave::Bip);
         assert_eq!(header.byte_order, ByteOrder::Msb);
         assert_eq!(header.header_offset, 128);
         assert_eq!(header.bytes_per_pixel, 4);
+    }
+
+    #[test]
+    fn accepts_case_insensitive_header_field_names() {
+        let header = parse_header_str(
+            "ENVI
+Samples = 4
+Lines = 3
+Bands = 2
+Data Type = 12
+Interleave = BSQ
+Byte Order = 0
+Header Offset = 256
+Map Info = {UTM, 1, 1, 500000, 4100000, 30, 30, 50, North, WGS-84, units=Meters}
+",
+        )
+        .expect("mixed-case header should parse");
+
+        assert_eq!(header.samples, 4);
+        assert_eq!(header.lines, 3);
+        assert_eq!(header.bands, 2);
+        assert_eq!(header.data_type, DataType::U16);
+        assert_eq!(header.interleave, Interleave::Bsq);
+        assert_eq!(header.header_offset, 256);
+        assert!(header.map_info.is_some());
     }
 
     #[test]
@@ -177,8 +215,9 @@ lines = 3
 bands = 2
 data type = 12
 interleave = bil
-"
-        ).expect("header should parse with defaults");
+",
+        )
+        .expect("header should parse with defaults");
 
         assert_eq!(header.byte_order, ByteOrder::Lsb);
         assert_eq!(header.header_offset, 0);
@@ -196,8 +235,9 @@ data type = 12
 interleave = bsq
 byte order = 0
 map info = {UTM, 1, 1, 500000, 4100000, 30, 30, 50, North, WGS-84, units=Meters}
-"
-        ).expect("map info should parse");
+",
+        )
+        .expect("map info should parse");
 
         assert_eq!(
             header.map_info.as_deref(),
@@ -219,13 +259,16 @@ byte order = 0
 coordinate system string = {PROJCS[\"WGS 84 / UTM zone 50N\",
 GEOGCS[\"WGS 84\"],
 UNIT[\"Meter\",1.0]}
-"
-        ).expect("coordinate system string should parse");
+",
+        )
+        .expect("coordinate system string should parse");
 
         assert_eq!(
             header.coordinate_system_string.as_deref(),
             Some("PROJCS[\"WGS 84 / UTM zone 50N\", GEOGCS[\"WGS 84\"], UNIT[\"Meter\",1.0]")
         );
-        assert!(!header.custom_fields.contains_key("coordinate system string"));
+        assert!(!header
+            .custom_fields
+            .contains_key("coordinate system string"));
     }
 }

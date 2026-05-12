@@ -1,10 +1,12 @@
 # SoftwareX Reference And Dataset Provenance Notes v1
 
-Prepared on: `2026-04-24`
+Prepared on: `2026-04-24`; status refreshed on `2026-05-12`
 
 Purpose: collect candidate references and provenance notes needed to turn
 `docs/SOFTWAREX_MANUSCRIPT_v4.md` from a strong draft into a template-ready
-SoftwareX submission. This is a working file, not the final reference list.
+SoftwareX submission. Most citation candidates below are now inserted into v4;
+this remains a working provenance and final-permission checklist, not the final
+reference list.
 
 ## Source Check Notes
 
@@ -25,6 +27,25 @@ The following source pages were opened during preparation on `2026-04-24`:
 Some DOI pages redirect through publisher infrastructure and should still be
 checked during final reference cleanup, especially for Elsevier-hosted entries.
 
+### EHU/GIC Source Confirmation On 2026-05-12
+
+The current SoftwareX real-data validation set includes several files whose
+local names, dimensions, and `.mat` download sizes match the UPV/EHU GIC
+`Hyperspectral Remote Sensing Scenes` page:
+
+| Local validation case | Local evidence | EHU/GIC page evidence | Citation posture |
+| --- | --- | --- | --- |
+| Pavia University | `test-data/高光谱数据集/Pavia University/PaviaU.mat` is `33 MB`; converted ENVI header is `340 x 610 x 103` after discarding empty samples | page lists `Pavia University (33.2 MB)`, says the scene has `103` bands, and notes discarded samples in the Pavia scenes | Cite EHU/GIC as the access page and acknowledge Prof. Paolo Gamba, the Telecommunications and Remote Sensing Laboratory, and the University of Pavia as providers. |
+| Pavia Centre | `test-data/高光谱数据集/Pavia Centre/Pavia.mat` is `124 MB`; converted ENVI header is `715 x 1096 x 102` after discarding empty samples | page lists `Pavia Centre (123.6 MB)`, says the scene has `102` bands, and notes discarded samples in the Pavia scenes | Cite EHU/GIC as the access page and acknowledge Prof. Paolo Gamba, the Telecommunications and Remote Sensing Laboratory, and the University of Pavia as providers. |
+| Kennedy Space Center | `test-data/高光谱数据集/Kennedy Space Center (KSC)/KSC.mat` is `54 MB`; converted ENVI header is `614 x 512 x 176` | page lists `Kennedy Space Center (KSC) (56.8 MB)` and says `176` bands were used after removing water-absorption and low-SNR bands | Cite EHU/GIC as the access page, and describe the original acquisition as NASA AVIRIS over KSC with ground-truth preparation by KSC personnel as summarized by the page. |
+| Indian Pines | local directory includes `Indian_pines.mat` `6.0 MB`, `Indian_pines_corrected.mat` `5.7 MB`, and `Indian_pines_gt.mat` `1.1 KB`; converted ENVI header is `145 x 145 x 220` | page lists files with the same three sizes but states that Indian Pines data are available through Purdue MultiSpec | Use Purdue/PURR DOI `10.4231/R7RX991C` as the primary citation. Cite EHU/GIC only as an access/index page if those exact files were downloaded from it. |
+
+The EHU/GIC page describes the datasets as publicly available but does not
+provide an explicit redistribution or screenshot license on the dataset page.
+For the SoftwareX paper, keep raw data excluded from Git, cite the access page
+and original providers, and treat screenshot reuse as a permission/provenance
+item to confirm before final submission.
+
 ## Current Dataset Permission Posture
 
 | Dataset/source | Current interpretation | Submission risk |
@@ -38,30 +59,32 @@ checked during final reference cleanup, especially for Elsevier-hosted entries.
 ## How To Use This File
 
 1. Verify each candidate source and dataset license before final submission.
-2. Add confirmed entries to the final reference list or BibTeX file.
-3. Insert citation keys into `docs/SOFTWAREX_MANUSCRIPT_v4.md`.
+2. Keep inserted manuscript references aligned with the final reference list or
+   BibTeX file during template conversion.
+3. Replace candidate dataset provenance with confirmed license/permission
+   language before final submission.
 4. Keep local real ENVI source data out of Git.
 
 ## Candidate Sources For Format And Software Context
 
 | Candidate key | Use in manuscript | Source | Status |
 | --- | --- | --- | --- |
-| `NV5_ENVI_HeaderFiles` | ENVI header metadata fields, `.hdr`, required fields, default bands, wavelength metadata | NV5 Geospatial, "ENVI Header Files", https://www.nv5geospatialsoftware.com/docs/enviheaderfiles.html | `CANDIDATE` |
-| `NV5_ENVI_ImageFiles` | ENVI flat-binary raster plus ASCII header, BSQ/BIP/BIL interleave descriptions | NV5 Geospatial, "ENVI Image Files", https://www.nv5geospatialsoftware.com/docs/ENVIImageFiles.html | `CANDIDATE` |
-| `Signoroni2019_HSIReview` | Broad context: hyperspectral imaging data richness, analysis challenges, multidisciplinary HSI use | Signoroni, A.; Savardi, M.; Baronio, A.; Benini, S. "Deep Learning Meets Hyperspectral Image Analysis: A Multidisciplinary Review." `Journal of Imaging` 5(5):52. https://doi.org/10.3390/jimaging5050052 | `CANDIDATE` |
-| `Ghamisi2017_HSIOverview` | Broad context: state-of-the-art hyperspectral image/signal processing and high-dimensional data challenges | Ghamisi, P. et al. "Advances in Hyperspectral Image and Signal Processing: A Comprehensive Overview of the State of the Art." `IEEE Geoscience and Remote Sensing Magazine` 5(4), 37-78. https://doi.org/10.1109/MGRS.2017.2762087 | `CANDIDATE` |
-| `Dhaene2023_HSIToolbox` | Adjacent system comparison: web-based HSI classification, labeling, server training, multi-user queueing | Dhaene, Z.; Zizakic, N.; Huang, S.; Li, X.; Pizurica, A. "HSIToolbox: A web-based application for the classification of hyperspectral images." `SoftwareX` 22, 101340. https://doi.org/10.1016/j.softx.2023.101340 | `CANDIDATE` |
+| `NV5_ENVI_HeaderFiles` | ENVI header metadata fields, `.hdr`, required fields, default bands, wavelength metadata | NV5 Geospatial, "ENVI Header Files", https://www.nv5geospatialsoftware.com/docs/enviheaderfiles.html | `INSERTED` in v4 [4] |
+| `NV5_ENVI_ImageFiles` | ENVI flat-binary raster plus ASCII header, BSQ/BIP/BIL interleave descriptions | NV5 Geospatial, "ENVI Image Files", https://www.nv5geospatialsoftware.com/docs/ENVIImageFiles.html | `INSERTED` in v4 [5] |
+| `Signoroni2019_HSIReview` | Broad context: hyperspectral imaging data richness, analysis challenges, multidisciplinary HSI use | Signoroni, A.; Savardi, M.; Baronio, A.; Benini, S. "Deep Learning Meets Hyperspectral Image Analysis: A Multidisciplinary Review." `Journal of Imaging` 5(5):52. https://doi.org/10.3390/jimaging5050052 | `INSERTED` in v4 [1] |
+| `Ghamisi2017_HSIOverview` | Broad context: state-of-the-art hyperspectral image/signal processing and high-dimensional data challenges | Ghamisi, P. et al. "Advances in Hyperspectral Image and Signal Processing: A Comprehensive Overview of the State of the Art." `IEEE Geoscience and Remote Sensing Magazine` 5(4), 37-78. https://doi.org/10.1109/MGRS.2017.2762087 | `INSERTED` in v4 [2] |
+| `Dhaene2023_HSIToolbox` | Adjacent system comparison: web-based HSI classification, labeling, server training, multi-user queueing | Dhaene, Z.; Zizakic, N.; Huang, S.; Li, X.; Pizurica, A. "HSIToolbox: A web-based application for the classification of hyperspectral images." `SoftwareX` 22, 101340. https://doi.org/10.1016/j.softx.2023.101340 | `INSERTED` in v4 [3] |
 
 ## Candidate Dataset Provenance Entries
 
 | Dataset in Table 1 | Candidate source/provenance | Evidence to cite | Status |
 | --- | --- | --- | --- |
-| Indian Pines | Purdue MultiSpec hyperspectral images page and PURR DOI | MultiSpec page says the June 12, 1992 AVIRIS Indian Pine Test Site data are available through Purdue University Research Repository, DOI `10.4231/R7RX991C` | `CANDIDATE`; verify final license/permission for screenshot use |
-| Pavia University | EHU/GIC Hyperspectral Remote Sensing Scenes page | EHU/GIC page says Pavia Centre and University were acquired by ROSIS over Pavia, Italy, with 103 bands for Pavia University and scenes provided by Prof. Paolo Gamba | `CANDIDATE`; verify final license/permission for screenshot use |
-| Pavia Centre | EHU/GIC Hyperspectral Remote Sensing Scenes page | EHU/GIC page says Pavia Centre has 102 bands and was acquired by ROSIS over Pavia, Italy | `CANDIDATE`; verify final license/permission for screenshot use |
-| Kennedy Space Center | EHU/GIC Hyperspectral Remote Sensing Scenes page | EHU/GIC page says NASA AVIRIS acquired KSC data on March 23, 1996; after removing water absorption/low-SNR bands, 176 bands were used | `CANDIDATE`; verify final license/permission for screenshot use |
+| Indian Pines | Purdue MultiSpec hyperspectral images page and PURR DOI | MultiSpec page says the June 12, 1992 AVIRIS Indian Pine Test Site data are available through Purdue University Research Repository, DOI `10.4231/R7RX991C` | `INSERTED` in v4 [6]; verify final license/permission for screenshot use |
+| Pavia University | EHU/GIC Hyperspectral Remote Sensing Scenes page | EHU/GIC page says Pavia Centre and University were acquired by ROSIS over Pavia, Italy, with 103 bands for Pavia University and scenes provided by Prof. Paolo Gamba | `INSERTED` in v4 [7]; verify final license/permission for screenshot use |
+| Pavia Centre | EHU/GIC Hyperspectral Remote Sensing Scenes page | EHU/GIC page says Pavia Centre has 102 bands and was acquired by ROSIS over Pavia, Italy | `INSERTED` in v4 [7]; verify final license/permission for screenshot use |
+| Kennedy Space Center | EHU/GIC Hyperspectral Remote Sensing Scenes page | EHU/GIC page says NASA AVIRIS acquired KSC data on March 23, 1996; after removing water absorption/low-SNR bands, 176 bands were used | `INSERTED` in v4 [7]; verify final license/permission for screenshot use |
 | Pika IR-L Hyalite Creek | Resonon Pika IR-L product/sample data pages and local header metadata | Resonon documents Pika IR-L as a near-infrared imager covering 925-1700 nm; local header provides exact scene dimensions and wavelength units | `PARTIAL`; need exact sample-data page or license for the Hyalite Creek file before manuscript reuse |
-| WHU-Hi LongKou | Zhong et al. 2020 WHU-Hi paper | Remote Sensing of Environment article introduces WHU-Hi as a UAV-borne H2 benchmark dataset; manuscript table uses local ENVI copy of WHU-Hi LongKou | `CANDIDATE`; verify dataset download license/permission |
+| WHU-Hi LongKou | Zhong et al. 2020 WHU-Hi paper | Remote Sensing of Environment article introduces WHU-Hi as a UAV-borne H2 benchmark dataset; manuscript table uses local ENVI copy of WHU-Hi LongKou | `INSERTED` in v4 [9]; verify dataset download license/permission |
 | SnowEx AVIRIS-NG SASP | SnowEx Hackweek AVIRIS-NG tutorial and/or NSIDC SnowEx AVIRIS-NG data product | SnowEx tutorial uses the SASP subset file `ang20210411t181022_rfl_v2z1a_img_SASP`; NSIDC data product should be preferred for final citation if it matches the source data | `PARTIAL`; replace tutorial-only source with official NSIDC citation if possible |
 
 ## Candidate Citation Snippets
@@ -130,12 +153,15 @@ SnowEx Hackweek 2022. Introduction to AVIRIS-NG. Accessed 2026-04-24.
 https://snowex-2022.hackweek.io/tutorials/aviris-ng/AVIRIS-NG_Tutorial.html
 ```
 
-## Open Questions Before Citation Insertion
+## Open Questions Before Final Submission
 
-1. Are the local Indian Pines, Pavia, KSC, Pika, and WHU-Hi files copied from
-   the candidate sources listed above, or from another mirror?
+1. For Pavia University, Pavia Centre, KSC, and Indian Pines, the local file
+   names, dimensions, and download sizes strongly match the EHU/GIC and
+   Purdue/MultiSpec sources above; final submission should still record the
+   author's best knowledge of the original download path.
 2. Are screenshots from these local datasets permitted in the manuscript and/or
-   graphical abstract?
+   graphical abstract? The EHU/GIC dataset page does not provide an explicit
+   screenshot or redistribution license.
 3. Should the real ENVI screenshots be included as a manuscript figure, a
    graphical abstract component, supplementary material, or only as internal
    validation evidence?

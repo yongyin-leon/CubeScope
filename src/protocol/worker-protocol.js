@@ -2,6 +2,8 @@
  * @fileoverview Shared message contracts for the CubeScope worker runtime.
  */
 
+export const WORKER_PROTOCOL_VERSION = 1;
+
 export const WorkerCommand = Object.freeze({
     INIT: 'init',
     CANCEL: 'cancel',
@@ -32,6 +34,7 @@ function createWorkerEnvelope(type, {
     error,
 } = {}) {
     const envelope = {
+        protocolVersion: WORKER_PROTOCOL_VERSION,
         type,
         sourceId,
         payload,
@@ -74,9 +77,14 @@ export function createWorkerError({
 
 export function isWorkerEnvelope(value) {
     return Boolean(value)
+        && value.protocolVersion === WORKER_PROTOCOL_VERSION
         && typeof value.type === 'string'
         && typeof value.sourceId === 'number'
         && Object.prototype.hasOwnProperty.call(value, 'payload');
+}
+
+export function isSupportedWorkerProtocolVersion(value) {
+    return value?.protocolVersion === WORKER_PROTOCOL_VERSION;
 }
 
 export function createWorkerMessage(type, payload = {}) {

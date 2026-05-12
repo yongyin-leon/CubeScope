@@ -4,7 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { chromium } from '@playwright/test';
+import { chromium, firefox, webkit } from '@playwright/test';
 
 import {
     buildExampleUrl,
@@ -24,6 +24,38 @@ const pageGotoOptions = {
     waitUntil: 'domcontentloaded',
     timeout: 60_000,
 };
+const browserEngines = Object.freeze({
+    chromium,
+    firefox,
+    webkit,
+});
+
+function parseBrowserSelection(value = process.env.CUBESCOPE_BROWSER_MATRIX_BROWSERS) {
+    if (!value || value.trim().length === 0) {
+        return ['chromium', 'firefox', 'webkit'];
+    }
+
+    return value
+        .split(',')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => Object.hasOwn(browserEngines, entry));
+}
+
+function isBrowserAvailabilityError(error) {
+    const message = String(error?.message ?? error ?? '');
+    return /Executable doesn't exist|browserType\.launch|Host system is missing dependencies|Failed to launch/i.test(message);
+}
+
+function buildLaunchOptions(browserName) {
+    if (browserName === 'chromium') {
+        return {
+            headless: true,
+            args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader-webgpu'],
+        };
+    }
+
+    return { headless: true };
+}
 
 function isPortAvailable(port) {
     const result = spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'], {
@@ -69,14 +101,13 @@ function summarizeMetrics(metrics = []) {
     };
 }
 
-async function collectScenario({ id, rendererPreference, baseUrl }) {
-    const browser = await chromium.launch({
-        headless: true,
-        args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader-webgpu'],
-    });
+async function collectScenario({ id, browserName, rendererPreference, baseUrl, required = false }) {
+    const browserType = browserEngines[browserName];
+    let browser;
     let page = null;
 
     try {
+        browser = await browserType.launch(buildLaunchOptions(browserName));
         page = await browser.newPage({ baseURL: baseUrl });
         await page.goto(buildExampleUrl({
             benchmark: true,
@@ -119,11 +150,12 @@ async function collectScenario({ id, rendererPreference, baseUrl }) {
 
         return {
             id,
-            browser: 'chromium',
+            browser: browserName,
             browserVersion: await browser.version(),
             rendererPreference,
             rendererStatus: postBandSwitchState?.rendererStatus ?? null,
             status,
+            required,
             warnings,
             actionableErrors,
             header: postBandSwitchState?.header
@@ -142,14 +174,34 @@ async function collectScenario({ id, rendererPreference, baseUrl }) {
             logsTail: (postBandSwitchState?.logs ?? []).slice(-20),
         };
     } catch (error) {
+        if (!required && isBrowserAvailabilityError(error)) {
+            return {
+                id,
+                browser: browserName,
+                browserVersion: null,
+                rendererPreference,
+                status: 'skipped',
+                required: false,
+                warnings: [`${browserName} was not available in this local Playwright environment: ${error.message}`],
+                actionableErrors: [],
+                rendererStatus: null,
+                header: null,
+                metrics: summarizeMetrics([]),
+                probe: { pixel: null, world: null },
+                logsTail: [],
+            };
+        }
+
         const currentState = page
             ? await page.evaluate(() => window.__cubescopeDemoState ?? null).catch(() => null)
             : null;
         return {
             id,
-            browser: 'chromium',
+            browser: browserName,
+            browserVersion: browser ? await browser.version().catch(() => null) : null,
             rendererPreference,
             status: 'failed',
+            required,
             warnings: [],
             actionableErrors: [error.message],
             rendererStatus: currentState?.rendererStatus ?? null,
@@ -169,20 +221,45 @@ async function collectScenario({ id, rendererPreference, baseUrl }) {
             logsTail: (currentState?.logs ?? []).slice(-20),
         };
     } finally {
-        await browser.close();
+        await browser?.close();
     }
 }
 
-const scenarios = [
-    {
-        id: 'chromium-local-webgl',
-        rendererPreference: 'webgl',
-    },
-    {
-        id: 'chromium-local-auto',
-        rendererPreference: 'auto',
-    },
-];
+function buildScenarios(browserNames) {
+    const scenarios = [];
+
+    for (const browserName of browserNames) {
+        if (browserName === 'chromium') {
+            scenarios.push(
+                {
+                    id: 'chromium-local-webgl',
+                    browserName,
+                    rendererPreference: 'webgl',
+                    required: true,
+                },
+                {
+                    id: 'chromium-local-auto',
+                    browserName,
+                    rendererPreference: 'auto',
+                    required: true,
+                }
+            );
+            continue;
+        }
+
+        scenarios.push({
+            id: `${browserName}-local-webgl`,
+            browserName,
+            rendererPreference: 'webgl',
+            required: false,
+        });
+    }
+
+    return scenarios;
+}
+
+const requestedBrowsers = parseBrowserSelection();
+const scenarios = buildScenarios(requestedBrowsers);
 
 const serverPort = pickServerPort();
 const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
@@ -204,7 +281,14 @@ try {
     }
 
     const failedCount = results.filter((result) => result.status === 'failed').length;
+    const requiredFailedCount = results.filter((result) => result.required !== false && result.status === 'failed').length;
     const warningCount = results.filter((result) => result.status === 'warning').length;
+    const skippedCount = results.filter((result) => result.status === 'skipped').length;
+    const verifiedBrowserNames = Array.from(new Set(
+        results
+            .filter((result) => ['passed', 'warning'].includes(result.status))
+            .map((result) => result.browser)
+    ));
     const report = {
         project: '@cubescope/web',
         generatedAt: new Date().toISOString(),
@@ -213,13 +297,17 @@ try {
             platform: process.platform,
             serverBaseUrl,
             fixture: 'cubescope-mini-cube',
+            requestedBrowsers,
         },
         summary: {
             totalScenarios: results.length,
             passed: results.filter((result) => result.status === 'passed').length,
             warnings: warningCount,
+            skipped: skippedCount,
             failed: failedCount,
-            overallStatus: failedCount > 0
+            requiredFailed: requiredFailedCount,
+            verifiedBrowsers: verifiedBrowserNames,
+            overallStatus: requiredFailedCount > 0
                 ? 'failed'
                 : warningCount > 0
                     ? 'warning'
@@ -232,7 +320,7 @@ try {
     writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
 
-    if (failedCount > 0) {
+    if (requiredFailedCount > 0) {
         process.exitCode = 1;
     }
 } finally {

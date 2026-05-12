@@ -2,6 +2,18 @@
  * @fileoverview Minimal renderer input contract helpers.
  */
 
+export const DEFAULT_RENDER_TILE_SIZE = 512;
+
+function normalizeTileSize(tileSize) {
+    const normalized = Number(tileSize);
+
+    if (!Number.isInteger(normalized) || normalized < 1) {
+        throw new TypeError('RendererInput.tileSize must be a positive integer.');
+    }
+
+    return normalized;
+}
+
 export function createRendererInput({
     sourceId,
     slot = 'active',
@@ -9,6 +21,7 @@ export function createRendererInput({
     viewState = null,
     layers = [],
     tiles = [],
+    tileSize = DEFAULT_RENDER_TILE_SIZE,
     clearMode = 'clear',
 }) {
     if (sourceId === undefined || sourceId === null) {
@@ -22,6 +35,7 @@ export function createRendererInput({
         viewState,
         layers: Array.from(layers),
         tiles: Array.from(tiles),
+        tileSize: normalizeTileSize(tileSize),
         clearMode,
     };
 
@@ -36,5 +50,7 @@ export function isRendererInput(value) {
         && typeof value.sourceId === 'string'
         && typeof value.slot === 'string'
         && Array.isArray(value.layers)
-        && Array.isArray(value.tiles);
+        && Array.isArray(value.tiles)
+        && Number.isInteger(value.tileSize)
+        && value.tileSize > 0;
 }

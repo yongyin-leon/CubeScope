@@ -3,10 +3,12 @@
  */
 
 import {
+    WORKER_PROTOCOL_VERSION,
     WorkerCommand,
     WorkerResponse,
     createWorkerError,
     createWorkerResponse,
+    isSupportedWorkerProtocolVersion,
 } from '../protocol/worker-protocol.js';
 import { buildDeterministicSampleTiles } from './tile-sampling.js';
 import { createWorkerCubeStore } from './worker-cube-store.js';
@@ -35,12 +37,22 @@ function isActiveRequest(sourceId, requestId) {
 }
 
 self.onmessage = async (event) => {
+    const data = event.data ?? {};
+    if (!isSupportedWorkerProtocolVersion(data)) {
+        self.postMessage(createWorkerError({
+            sourceId: Number.isInteger(data.sourceId) ? data.sourceId : 0,
+            requestId: data.requestId,
+            message: `Unsupported worker protocol version: ${String(data.protocolVersion ?? 'missing')}. Expected ${WORKER_PROTOCOL_VERSION}.`,
+        }));
+        return;
+    }
+
     const {
         type,
         sourceId = 0,
         requestId,
         payload = {},
-    } = event.data;
+    } = data;
 
     if (type === WorkerCommand.INIT) {
         try {

@@ -326,11 +326,17 @@ repository includes deterministic validation fixtures, benchmark outputs,
 browser-matrix reports, sample-validation reports, and packaging-verification
 artifacts as part of the software release and reproducibility workflow. Local
 real ENVI datasets were used to prepare illustrative screenshots and timing
-summaries for the manuscript, but those source data files are excluded from Git
-and are not redistributed with the software package. If additional
-submission-system wording is required, this section should be aligned with the
-final public repository, release archive, and the licensing terms of any
-externally obtained datasets.
+summaries for the manuscript. The Pavia Centre, Pavia University, and Kennedy
+Space Center validation cases were accessed as public benchmark scenes through
+the UPV/EHU GIC Hyperspectral Remote Sensing Scenes resource [7]. Indian Pines
+is cited through the Purdue MultiSpec/PURR source [6]; the local files also
+match the EHU/GIC index entries, but Purdue/PURR is treated as the primary
+provenance source. The Pika IR-L and WHU-Hi LongKou cases are attributed to the
+cited source documentation or publication [8,9]. These externally obtained
+source data files are excluded from Git and are not redistributed with the
+software package. If additional submission-system wording is required, this
+section should be aligned with the final public repository, release archive,
+and the licensing terms of the source datasets.
 
 ## Software availability
 
@@ -364,7 +370,17 @@ in this paper. `[Revise if needed before submission.]`
 
 ## Acknowledgements
 
-`[To be completed. Keep this section directly before the references list in the final manuscript.]`
+The author acknowledges the UPV/EHU Grupo de Inteligencia Computacional (GIC)
+Hyperspectral Remote Sensing Scenes resource, collected by M. Graña, M. A.
+Veganzons, and B. Ayerdi, for making benchmark scene information and download
+links available to the community. The Pavia Centre and Pavia University scenes
+are acknowledged as provided by Prof. Paolo Gamba and the Telecommunications
+and Remote Sensing Laboratory, University of Pavia. The Indian Pines data
+source is acknowledged through Purdue MultiSpec and the Purdue University
+Research Repository. The Kennedy Space Center scene is acknowledged as NASA
+AVIRIS data with ground-reference preparation summarized by the EHU/GIC
+resource. `[Add any funding-specific, institutional, or personal
+acknowledgements before final submission.]`
 
 ## References
 

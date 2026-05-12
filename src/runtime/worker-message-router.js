@@ -2,7 +2,11 @@
  * @fileoverview Internal helpers for normalizing and classifying worker runtime messages.
  */
 
-import { WorkerResponse } from '../protocol/worker-protocol.js';
+import {
+    WORKER_PROTOCOL_VERSION,
+    WorkerResponse,
+    isSupportedWorkerProtocolVersion,
+} from '../protocol/worker-protocol.js';
 import { isStaleSourceMessage } from './request-tracker.js';
 
 function toTileKey(tile) {
@@ -30,6 +34,7 @@ export function normalizeWorkerRuntimeMessage(event) {
 
     return Object.freeze({
         worker: event?.target ?? null,
+        protocolVersion: data.protocolVersion,
         type: data.type ?? WorkerResponse.ERROR,
         sourceId: data.sourceId ?? 0,
         requestId: data.requestId,
@@ -40,6 +45,13 @@ export function normalizeWorkerRuntimeMessage(event) {
 }
 
 export function classifyWorkerRuntimeMessage(message, { activeSourceId, currentBands }) {
+    if (!isSupportedWorkerProtocolVersion(message)) {
+        return Object.freeze({
+            kind: 'error',
+            message: `Unsupported worker protocol version: ${String(message.protocolVersion ?? 'missing')}. Expected ${WORKER_PROTOCOL_VERSION}.`,
+        });
+    }
+
     if (isStaleSourceMessage(activeSourceId, message.sourceId)) {
         return Object.freeze({ kind: 'stale-source' });
     }

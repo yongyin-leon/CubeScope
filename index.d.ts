@@ -26,6 +26,13 @@ export type ViewerRuntimeConfig = {
 
 export type RendererPreference = 'auto' | 'webgpu' | 'webgl';
 
+/**
+ * Canonical cube data-type labels.
+ *
+ * Complex ENVI headers are recognized for metadata normalization, but the v0.1
+ * alpha renderer/statistics/spectrum pipeline rejects complex-valued cubes with
+ * an explicit unsupported-data-type error.
+ */
 export type CubeDataType =
   | 'u8'
   | 'i16'
@@ -128,6 +135,20 @@ export type ViewerViewportState = {
   canvasHeight: number;
 };
 
+export type ViewerPixelProbeSpectrumPoint = {
+  band: number;
+  wavelength?: number;
+  value: number;
+};
+
+export type ViewerPixelProbeSnapshot = {
+  pixel: CubeCoordinate;
+  world: CubeCoordinate | null;
+  spectrum: ViewerPixelProbeSpectrumPoint[];
+  header: Pick<CubeHeader, 'samples' | 'lines' | 'bands' | 'interleave' | 'dataType' | 'byteOrder'>;
+  viewport: ViewerViewportState | null;
+};
+
 export type ViewerEventMap = {
   ready: void;
   loadstart: void;
@@ -162,6 +183,7 @@ export declare class CubeViewer {
   getViewportState(): ViewerViewportState | null;
   getHeader(): CubeHeader | null;
   getSpectralProfile(x: number, y: number): Promise<Float32Array | null>;
+  getPixelProbe(x: number, y: number): Promise<ViewerPixelProbeSnapshot | null>;
   pixelToWorld(x: number, y: number): CubeCoordinate | null;
   worldToPixel(x: number, y: number): CubeCoordinate | null;
   destroy(): void;

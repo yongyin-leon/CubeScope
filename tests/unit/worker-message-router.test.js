@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
-import { WorkerResponse } from '../../src/protocol/worker-protocol.js';
+import {
+    WORKER_PROTOCOL_VERSION,
+    WorkerResponse,
+} from '../../src/protocol/worker-protocol.js';
 import {
     classifyWorkerRuntimeMessage,
     normalizeWorkerRuntimeMessage,
 } from '../../src/runtime/worker-message-router.js';
 
 function normalize(data, worker = { id: 'worker-1' }) {
-    return normalizeWorkerRuntimeMessage({ data, target: worker });
+    return normalizeWorkerRuntimeMessage({
+        data: {
+            protocolVersion: WORKER_PROTOCOL_VERSION,
+            ...data,
+        },
+        target: worker,
+    });
 }
 
 describe('worker-message-router', () => {
@@ -97,6 +106,29 @@ describe('worker-message-router', () => {
         expect(route).toEqual({
             kind: 'error',
             message: 'typed error message',
+        });
+    });
+
+    it('rejects unsupported protocol versions before mutating runtime state', () => {
+        const message = normalizeWorkerRuntimeMessage({
+            data: {
+                protocolVersion: WORKER_PROTOCOL_VERSION + 1,
+                type: WorkerResponse.TILE_COMPLETE,
+                sourceId: 3,
+                payload: {
+                    tile: { x: 0, y: 0 },
+                    bands: [30, 20, 10],
+                },
+            },
+            target: { id: 'worker-1' },
+        });
+
+        expect(classifyWorkerRuntimeMessage(message, {
+            activeSourceId: 3,
+            currentBands,
+        })).toEqual({
+            kind: 'error',
+            message: `Unsupported worker protocol version: ${WORKER_PROTOCOL_VERSION + 1}. Expected ${WORKER_PROTOCOL_VERSION}.`,
         });
     });
 });

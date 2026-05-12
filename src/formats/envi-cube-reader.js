@@ -498,22 +498,35 @@ export async function calculateSampledBandStats({
 
         let globalMin = Infinity;
         let globalMax = -Infinity;
+        let hasValidStats = false;
         for (const sampleChunk of collectedSamples) {
+            let chunkStats = null;
             try {
-                const chunkStats = calculateStatistics(sampleChunk);
-                if (chunkStats.min < globalMin) {
-                    globalMin = chunkStats.min;
+                chunkStats = calculateStatistics(sampleChunk);
+                const min = Number(chunkStats?.min);
+                const max = Number(chunkStats?.max);
+
+                if (!Number.isFinite(min) || !Number.isFinite(max)) {
+                    continue;
                 }
-                if (chunkStats.max > globalMax) {
-                    globalMax = chunkStats.max;
+
+                hasValidStats = true;
+                if (min < globalMin) {
+                    globalMin = min;
                 }
-                chunkStats.free?.();
+                if (max > globalMax) {
+                    globalMax = max;
+                }
             } catch (error) {
                 console.error('[ENVI-IO] Error calculating statistics:', error);
+            } finally {
+                chunkStats?.free?.();
             }
         }
 
-        finalStats[band] = { min: globalMin, max: globalMax };
+        finalStats[band] = hasValidStats
+            ? { min: globalMin, max: globalMax }
+            : null;
     }
 
     return finalStats;

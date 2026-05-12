@@ -206,6 +206,7 @@ const viewer = new CubeViewer(container, options);
 - `updateConfig(partialConfig): void`
 - `getHeader(): CubeHeader | null`
 - `getSpectralProfile(x, y): Promise<Float32Array | null>`
+- `getPixelProbe(x, y): Promise<ViewerPixelProbeSnapshot | null>` JSON-safe probe snapshot
 - `pixelToWorld(x, y): { x, y } | null`
 - `worldToPixel(x, y): { x, y } | null`
 - `destroy(): void`
@@ -269,7 +270,7 @@ npm run report:alpha
 # 运行 contract tests 与浏览器 smoke tests
 npm run test
 
-# 生成本地 Chromium 渲染 / 浏览器矩阵报告
+# 生成本地浏览器矩阵报告；Chromium/Firefox/WebKit 可用时都会实测记录
 npm run report:browser-matrix
 
 # 检查当前本地 toolchain，并探测 Node 22 运行时是否可用
@@ -508,6 +509,7 @@ const viewer = new CubeViewer(container, options);
 - `updateConfig(partialConfig): void`
 - `getHeader(): CubeHeader | null`
 - `getSpectralProfile(x, y): Promise<Float32Array | null>`
+- `getPixelProbe(x, y): Promise<ViewerPixelProbeSnapshot | null>` JSON-safe probe snapshot
 - `pixelToWorld(x, y): { x, y } | null`
 - `worldToPixel(x, y): { x, y } | null`
 - `destroy(): void`
@@ -573,7 +575,7 @@ npm run report:alpha
 # Run contract and browser smoke tests
 npm run test
 
-# Generate the local Chromium renderer/browser-matrix report
+# Generate the local browser matrix report; Chromium/Firefox/WebKit are validated when installed
 npm run report:browser-matrix
 
 # Inspect the local toolchain and discover whether a Node 22 runtime is available

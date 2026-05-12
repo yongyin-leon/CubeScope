@@ -231,4 +231,19 @@ describe('ENVI FormatAdapter cube read model', () => {
             expect(Array.from(spectrum)).toEqual([111, 211, 311, 411]);
         });
     }
+
+    it('rejects complex-valued ENVI headers with an explicit renderability error', async () => {
+        const header = {
+            ...createHeader('bsq'),
+            dataType: 'complex-f32',
+            bytesPerPixel: 8,
+        };
+        const adapter = createEnviFormatAdapter({
+            getWasmModule: async () => createFakeWasmModule(header),
+        });
+
+        await expect(adapter.parseHeader({
+            headerBytes: new Uint8Array([1]),
+        })).rejects.toThrow('Complex-valued cubes must be converted');
+    });
 });

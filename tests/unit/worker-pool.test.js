@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorkerResponse } from '../../src/protocol/worker-protocol.js';
+import {
+    WORKER_PROTOCOL_VERSION,
+    WorkerResponse,
+} from '../../src/protocol/worker-protocol.js';
 import { ViewerWorkerPool } from '../../src/runtime/worker-pool.js';
 
 class FakeWorker {
@@ -35,11 +38,11 @@ describe('ViewerWorkerPool', () => {
                     if (message.type === 'init') {
                         queueMicrotask(() => {
                             self.onmessage?.({
-                                data: { type: WorkerResponse.INIT_COMPLETE, sourceId: 0, payload: {} },
+                                data: { protocolVersion: WORKER_PROTOCOL_VERSION, type: WorkerResponse.INIT_COMPLETE, sourceId: 0, payload: {} },
                                 target: self,
                             });
                             self.onmessage?.({
-                                data: { type: 'tile_complete', sourceId: 1, payload: { tile: { x: 0, y: 0 }, bands: [30, 20, 10] } },
+                                data: { protocolVersion: WORKER_PROTOCOL_VERSION, type: 'tile_complete', sourceId: 1, payload: { tile: { x: 0, y: 0 }, bands: [30, 20, 10] } },
                                 target: self,
                             });
                         });
@@ -79,6 +82,7 @@ describe('ViewerWorkerPool', () => {
                     queueMicrotask(() => {
                         self.onmessage?.({
                             data: {
+                                protocolVersion: WORKER_PROTOCOL_VERSION,
                                 type: WorkerResponse.ERROR,
                                 sourceId: 0,
                                 payload: {},
@@ -100,5 +104,69 @@ describe('ViewerWorkerPool', () => {
             onRuntimeMessage: () => {},
             onWorkerFatalError: () => {},
         })).rejects.toThrow('init failed');
+    });
+
+    it('rejects initialization messages that do not match the worker protocol', async () => {
+        const pool = new ViewerWorkerPool({
+            createWorker: () => new FakeWorker((message, self) => {
+                if (message.type === 'init') {
+                    queueMicrotask(() => {
+                        self.onmessage?.({
+                            data: { type: WorkerResponse.INIT_COMPLETE, sourceId: 0, payload: {} },
+                            target: self,
+                        });
+                    });
+                }
+            }),
+        });
+
+        await expect(pool.init({
+            count: 1,
+            workerUrl: '/worker.js',
+            wasmJsPath: '/pkg/envi_parser.js',
+            wasmWasmPath: '/pkg/envi_parser_bg.wasm',
+            onWorkerReady: () => {},
+            onRuntimeMessage: () => {},
+            onWorkerFatalError: () => {},
+        })).rejects.toThrow('Unsupported worker protocol version during initialization');
+    });
+
+    it('removes and reports a worker that fails after initialization', async () => {
+        const fatalErrors = [];
+        const createdWorkers = [];
+        const pool = new ViewerWorkerPool({
+            createWorker: () => {
+                const worker = new FakeWorker((message, self) => {
+                    if (message.type === 'init') {
+                        queueMicrotask(() => {
+                            self.onmessage?.({
+                                data: { protocolVersion: WORKER_PROTOCOL_VERSION, type: WorkerResponse.INIT_COMPLETE, sourceId: 0, payload: {} },
+                                target: self,
+                            });
+                        });
+                    }
+                });
+                createdWorkers.push(worker);
+                return worker;
+            },
+        });
+
+        await pool.init({
+            count: 1,
+            workerUrl: '/worker.js',
+            wasmJsPath: '/pkg/envi_parser.js',
+            wasmWasmPath: '/pkg/envi_parser_bg.wasm',
+            onWorkerReady: () => {},
+            onRuntimeMessage: () => {},
+            onWorkerFatalError: (error, worker) => fatalErrors.push({ error, worker }),
+        });
+
+        createdWorkers[0].onerror?.(new Error('boom'));
+
+        expect(pool.size()).toBe(0);
+        expect(createdWorkers[0].terminated).toBe(true);
+        expect(fatalErrors).toHaveLength(1);
+        expect(fatalErrors[0].worker).toBe(createdWorkers[0]);
+        expect(fatalErrors[0].error.message).toBe('boom');
     });
 });

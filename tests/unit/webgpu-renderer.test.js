@@ -155,4 +155,28 @@ describe('WebGpuRenderer lifecycle', () => {
             rendererReady: false,
         });
     });
+
+    it('uses the renderer input tileSize when writing tile transforms', async () => {
+        const harness = installFakeWebGpu();
+        const renderer = new WebGpuRenderer(createCanvas(harness.context));
+
+        await renderer.init();
+        renderer.storeTile({
+            sourceId: 1,
+            header: { samples: 8, lines: 4 },
+            tilePayload: {
+                ...createTilePayload(),
+                tile: { x: 1, y: 0 },
+            },
+        });
+        renderer.render(createRendererInput({
+            sourceId: 1,
+            header: { samples: 8, lines: 4 },
+            tiles: [{ x: 1, y: 0 }],
+            tileSize: 2,
+        }));
+
+        const transform = harness.device.queue.writeBuffer.mock.calls.at(-1)?.[2];
+        expect(Array.from(transform)).toEqual([0.25, 0.25, -0.25, 0.25]);
+    });
 });

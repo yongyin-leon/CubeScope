@@ -44,7 +44,7 @@ npm run build
 # Contract tests + browser smoke
 npm run test
 
-# Local Chromium renderer/browser matrix report
+# Local browser matrix report; Chromium/Firefox/WebKit are validated when installed
 npm run report:browser-matrix
 
 # Inspect the current local toolchain and Node 22 runtime availability
@@ -138,10 +138,10 @@ npm run verify:alpha
 - `npm run report:toolchain` records whether a local Node 22 runtime is
   discoverable, and `npm run verify:node22-local` is the dedicated entrypoint
   for rerunning the alpha gate under that target runtime.
-- `npm run report:browser-matrix` records the locally observed Chromium
-  behavior for both `rendererPreference=webgl` and `rendererPreference=auto`
-  against the deterministic local ENVI fixture, including the observed active
-  renderer kind and any session-level fallback arming.
+- `npm run report:browser-matrix` records a local browser matrix against the
+  deterministic ENVI fixture. Chromium `webgl` and `auto` scenarios are
+  required; Firefox and WebKit WebGL scenarios are verified when the local
+  Playwright browser binaries are installed, and otherwise recorded as skipped.
 - Candidate public sources should first pass `npm run qualify:sample` before
   they are added to the shipped catalog.
 - The deterministic local gate remains separate from the public remote-sample

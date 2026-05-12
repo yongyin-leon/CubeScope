@@ -246,6 +246,65 @@ describe('CubeViewer public wrapper', () => {
         expect(internal.worldToPixel).toHaveBeenCalledWith(500060, 4099910);
     });
 
+    it('creates JSON-safe pixel probe snapshots through the public wrapper', async () => {
+        const container = document.createElement('div');
+        const viewer = new CubeViewer(container);
+        const internal = viewerInstances.at(-1);
+        internal.emit('headerloaded', {
+            samples: 48,
+            lines: 48,
+            bands: 3,
+            interleave: 'bsq',
+            dataType: 'u16',
+            byteOrder: 'lsb',
+            wavelength: [450, 550, 650],
+            spatialReference: {
+                affineTransform: [500000, 30, 0, 4100000, 0, -30],
+            },
+        });
+
+        await expect(viewer.getPixelProbe(2, 3)).resolves.toEqual({
+            pixel: { x: 2, y: 3 },
+            world: { x: 500060, y: 4099910 },
+            spectrum: [
+                { band: 1, wavelength: 450, value: 1 },
+                { band: 2, wavelength: 550, value: 2 },
+                { band: 3, wavelength: 650, value: 3 },
+            ],
+            header: {
+                samples: 48,
+                lines: 48,
+                bands: 3,
+                interleave: 'bsq',
+                dataType: 'u16',
+                byteOrder: 'lsb',
+            },
+            viewport: {
+                scale: 1,
+                offsetX: 0,
+                offsetY: 0,
+                visibleBounds: { x: 0, y: 0, width: 48, height: 48 },
+                canvasWidth: 640,
+                canvasHeight: 480,
+            },
+        });
+        expect(internal.getSpectralProfile).toHaveBeenCalledWith(2, 3);
+    });
+
+    it('returns null for out-of-bounds pixel probe snapshots', async () => {
+        const container = document.createElement('div');
+        const viewer = new CubeViewer(container);
+        const internal = viewerInstances.at(-1);
+        internal.emit('headerloaded', {
+            samples: 4,
+            lines: 4,
+            bands: 3,
+        });
+
+        await expect(viewer.getPixelProbe(5, 1)).resolves.toBeNull();
+        expect(internal.getSpectralProfile).not.toHaveBeenCalled();
+    });
+
     it('returns null for coordinate mapping before a header is loaded', () => {
         const container = document.createElement('div');
         const viewer = new CubeViewer(container);

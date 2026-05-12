@@ -22,6 +22,14 @@ function normalizeHeaderBytes(value) {
     return null;
 }
 
+const UNSUPPORTED_RENDERABLE_DATA_TYPES = new Set(['complex-f32', 'complex-f64']);
+
+function assertRenderableEnviDataType(header) {
+    if (UNSUPPORTED_RENDERABLE_DATA_TYPES.has(header?.dataType)) {
+        throw new TypeError(`ENVI data type ${header.dataType} is parsed but not renderable. Complex-valued cubes must be converted to a real-valued representation before loading.`);
+    }
+}
+
 export function normalizeEnviHeader(header) {
     return normalizeCubeHeader(header);
 }
@@ -50,6 +58,7 @@ export function createEnviFormatAdapter({ getWasmModule } = {}) {
 
             const reader = new EnviReader(bytes);
             const header = normalizeEnviHeader(reader.getHeaderAsJsObject());
+            assertRenderableEnviDataType(header);
 
             return header;
         },
@@ -76,6 +85,7 @@ export function createEnviFormatAdapter({ getWasmModule } = {}) {
             }
 
             const reader = new EnviReader(bytes);
+            assertRenderableEnviDataType(header);
 
             return readRenderedRgbTile({
                 enviReader: reader,
@@ -110,6 +120,7 @@ export function createEnviFormatAdapter({ getWasmModule } = {}) {
             }
 
             const reader = new EnviReader(bytes);
+            assertRenderableEnviDataType(header);
 
             return readSpectrumAtPixel({
                 enviReader: reader,
@@ -142,6 +153,7 @@ export function createEnviFormatAdapter({ getWasmModule } = {}) {
             }
 
             const reader = new EnviReader(bytes);
+            assertRenderableEnviDataType(header);
 
             return calculateSampledBandStats({
                 enviReader: reader,

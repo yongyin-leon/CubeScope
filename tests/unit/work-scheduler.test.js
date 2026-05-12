@@ -9,12 +9,27 @@ describe('WorkScheduler', () => {
         const workerB = { id: 'b' };
 
         scheduler.registerIdleWorker(workerA);
+        scheduler.registerIdleWorker(workerA);
         scheduler.registerIdleWorker(workerB);
 
         expect(scheduler.getIdleWorkerCount()).toBe(2);
         expect(scheduler.takeIdleWorker()).toBe(workerB);
         expect(scheduler.takeIdleWorker()).toBe(workerA);
         expect(scheduler.takeIdleWorker()).toBeNull();
+    });
+
+    it('removes a failed idle worker without disturbing the remaining pool', () => {
+        const scheduler = new WorkScheduler();
+        const workerA = { id: 'a' };
+        const workerB = { id: 'b' };
+
+        scheduler.registerIdleWorker(workerA);
+        scheduler.registerIdleWorker(workerB);
+
+        expect(scheduler.removeWorker(workerA)).toBe(1);
+        expect(scheduler.getIdleWorkerCount()).toBe(1);
+        expect(scheduler.takeIdleWorker()).toBe(workerB);
+        expect(scheduler.removeWorker(workerA)).toBe(0);
     });
 
     it('reports progress while draining background stats bands', () => {

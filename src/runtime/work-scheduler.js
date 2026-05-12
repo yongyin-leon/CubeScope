@@ -12,7 +12,17 @@ export class WorkScheduler {
     #isPreloading = false;
 
     registerIdleWorker(worker) {
+        if (!worker || this.#idleWorkers.includes(worker)) {
+            return;
+        }
+
         this.#idleWorkers.push(worker);
+    }
+
+    removeWorker(worker) {
+        const previousCount = this.#idleWorkers.length;
+        this.#idleWorkers = this.#idleWorkers.filter((idleWorker) => idleWorker !== worker);
+        return previousCount - this.#idleWorkers.length;
     }
 
     takeIdleWorker() {

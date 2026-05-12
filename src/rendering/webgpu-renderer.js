@@ -186,6 +186,7 @@ export class WebGpuRenderer {
             header,
             viewState = {},
             tiles = [],
+            tileSize,
             clearMode = 'clear',
         } = input;
 
@@ -227,6 +228,7 @@ export class WebGpuRenderer {
                 tile,
                 effectiveWidth: resource.effectiveWidth,
                 effectiveHeight: resource.effectiveHeight,
+                tileSize,
                 viewState,
             });
 
@@ -353,7 +355,7 @@ export class WebGpuRenderer {
         };
     }
 
-    #getTileTransform({ header, tile, effectiveWidth, effectiveHeight, viewState }) {
+    #getTileTransform({ header, tile, effectiveWidth, effectiveHeight, tileSize, viewState }) {
         const { x: aspectX, y: aspectY } = this.#getAspectRatioCorrection(header);
         const normalizedViewState = viewState ?? {};
         const scale = normalizedViewState.scale ?? 1;
@@ -361,8 +363,8 @@ export class WebGpuRenderer {
         const offsetY = normalizedViewState.offsetY ?? 0;
         const tileScaleX = (effectiveWidth / header.samples) * aspectX;
         const tileScaleY = (effectiveHeight / header.lines) * aspectY;
-        const tileOffsetX = ((tile.x * 512 + effectiveWidth / 2) / header.samples * 2 - 1) * aspectX;
-        const tileOffsetY = ((tile.y * 512 + effectiveHeight / 2) / header.lines * -2 + 1) * aspectY;
+        const tileOffsetX = ((tile.x * tileSize + effectiveWidth / 2) / header.samples * 2 - 1) * aspectX;
+        const tileOffsetY = ((tile.y * tileSize + effectiveHeight / 2) / header.lines * -2 + 1) * aspectY;
 
         return new Float32Array([
             tileScaleX * scale,

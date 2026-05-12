@@ -236,7 +236,9 @@ Status note:
 - `src/runtime/viewer-runtime.js` now renders through
   `createRendererInput(...)` instead of issuing draw commands directly
 - renderer input remains explicitly source-scoped through `sourceId`, `slot`,
-  `header`, `viewState`, and visible `tiles`
+  `header`, `viewState`, visible `tiles`, and `tileSize`
+- WebGPU and WebGL renderers now consume `tileSize` from `RendererInput`
+  instead of relying on the historical `512` tile-size assumption
 
 Work:
 
@@ -287,6 +289,8 @@ Status note:
 - `src/runtime/viewer-runtime.js` now pauses requeue while the renderer is down
   and performs best-effort WebGPU reinitialization before redrawing the active
   source
+- renderer tests now cover transform calculation through explicit
+  `RendererInput.tileSize`
 
 Work:
 
@@ -457,6 +461,8 @@ Status note:
 - `CubeViewer` and `CubeStore` now expose affine `pixelToWorld(...)` and
   `worldToPixel(...)` helpers for local ENVI sources
 - the example app now reports pixel/world probe coordinates after clicks
+- `CubeViewer.getPixelProbe(...)` now returns a JSON-safe pixel, world,
+  spectrum, header-summary, and viewport snapshot for export/provenance
 - overlay proof remains deferred; this task is now mostly about the overlay
   follow-on rather than the core mapping API
 

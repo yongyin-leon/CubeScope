@@ -18,7 +18,7 @@ pub enum EnviError {
 
     #[error("不支持的字节序代码: {0}")]
     UnsupportedByteOrder(i32),
-    
+
     #[error("无效的字节序值: {0}")]
     InvalidByteOrder(i32),
 

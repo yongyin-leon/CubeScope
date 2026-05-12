@@ -124,9 +124,11 @@ const summary = {
                 summary: browserMatrix.summary,
                 scenarios: browserMatrix.scenarios?.map((scenario) => ({
                     id: scenario.id,
+                    browser: scenario.browser,
                     rendererPreference: scenario.rendererPreference,
                     rendererStatus: scenario.rendererStatus,
                     status: scenario.status,
+                    required: scenario.required !== false,
                 })) ?? [],
             }
             : null,
@@ -197,7 +199,7 @@ const summary = {
             : 'HTTP range initial-view validation is part of the local gate; a stable public remote sample is still pending.',
         'Local smoke and benchmark verification now pin the renderer to WebGL compatibility mode for deterministic browser validation, while the runtime default remains auto.',
         browserMatrix
-            ? `The local Chromium browser matrix currently reports ${browserMatrix.summary?.overallStatus ?? 'unknown'} across the scripted renderer preferences.`
+            ? `The local browser matrix currently reports ${browserMatrix.summary?.overallStatus ?? 'unknown'}; verified browsers: ${(browserMatrix.summary?.verifiedBrowsers ?? []).join(', ') || 'none'}, skipped optional scenarios: ${browserMatrix.summary?.skipped ?? 0}.`
             : 'A local browser-matrix report has not been generated yet.',
         buildNode22Note(),
         'Node 22 remains the target toolchain for public release, but external CI confirmation is intentionally deferred for now.',

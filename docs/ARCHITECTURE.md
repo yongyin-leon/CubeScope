@@ -183,6 +183,7 @@ type RendererInput = {
   viewState: unknown
   layers: unknown[]
   tiles: TileChunk[]
+  tileSize: number
 }
 
 interface Renderer {
@@ -332,6 +333,7 @@ Required envelope floor:
 
 ```ts
 type WorkerRequestEnvelope = {
+  protocolVersion: 1
   type: string
   sourceId: number
   requestId?: string
@@ -339,6 +341,7 @@ type WorkerRequestEnvelope = {
 }
 
 type WorkerResponseEnvelope = {
+  protocolVersion: 1
   type: string
   sourceId: number
   requestId?: string

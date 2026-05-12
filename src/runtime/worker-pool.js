@@ -2,7 +2,11 @@
  * @fileoverview Internal worker-pool lifecycle manager for runtime workers.
  */
 
-import { WorkerResponse } from '../protocol/worker-protocol.js';
+import {
+    WORKER_PROTOCOL_VERSION,
+    WorkerResponse,
+    isSupportedWorkerProtocolVersion,
+} from '../protocol/worker-protocol.js';
 import { buildWorkerInitRequest } from './worker-dispatch-policy.js';
 
 function toInitErrorMessage(event) {
@@ -41,6 +45,12 @@ export class ViewerWorkerPool {
             const promise = new Promise((resolve, reject) => {
                 worker.onmessage = (event) => {
                     if (!initialized) {
+                        if (!isSupportedWorkerProtocolVersion(event.data)) {
+                            this.remove(worker);
+                            reject(new Error(`Unsupported worker protocol version during initialization: ${String(event.data?.protocolVersion ?? 'missing')}. Expected ${WORKER_PROTOCOL_VERSION}.`));
+                            return;
+                        }
+
                         if (event.data?.type === WorkerResponse.INIT_COMPLETE) {
                             initialized = true;
                             onWorkerReady?.(worker, event);
@@ -49,6 +59,7 @@ export class ViewerWorkerPool {
                         }
 
                         if (event.data?.type === WorkerResponse.ERROR) {
+                            this.remove(worker);
                             reject(new Error(toInitErrorMessage(event)));
                             return;
                         }
@@ -58,6 +69,7 @@ export class ViewerWorkerPool {
                 };
 
                 worker.onerror = (error) => {
+                    this.remove(worker);
                     onWorkerFatalError?.(error, worker);
                     if (!initialized) {
                         reject(error);
@@ -74,6 +86,13 @@ export class ViewerWorkerPool {
 
         await Promise.all(initPromises);
         return this.#workers.length;
+    }
+
+    remove(worker) {
+        const previousCount = this.#workers.length;
+        this.#workers = this.#workers.filter((entry) => entry !== worker);
+        worker?.terminate?.();
+        return previousCount - this.#workers.length;
     }
 
     broadcast(message) {

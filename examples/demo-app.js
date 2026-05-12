@@ -1125,22 +1125,32 @@ async function main() {
             return;
         }
 
-        const world = viewer.pixelToWorld(x, y);
+        let probe = null;
         let spectrum = null;
         try {
-            spectrum = await viewer.getSpectralProfile(x, y);
+            probe = await viewer.getPixelProbe(x, y);
+            spectrum = probe?.spectrum?.map((point) => point.value) ?? null;
         } catch (error) {
             appendEvent(`Spectral profile failed: ${error.message}`, { level: 'ERROR', source: 'Probe' });
         }
 
-        const probe = {
+        const fallbackProbe = {
             pixel: { x, y },
-            world,
+            world: viewer.pixelToWorld(x, y),
             spatialReference: viewer.getHeader()?.spatialReference,
         };
-        demoState.lastProbe = probe;
-        renderProbe({ pixel: probe.pixel, world, spectrum });
-        renderSpectralProfile(spectrum, probe.pixel);
+        demoState.lastProbe = probe
+            ? {
+                ...probe,
+                spatialReference: viewer.getHeader()?.spatialReference,
+            }
+            : fallbackProbe;
+        renderProbe({
+            pixel: demoState.lastProbe.pixel,
+            world: demoState.lastProbe.world,
+            spectrum,
+        });
+        renderSpectralProfile(spectrum, demoState.lastProbe.pixel);
         appendEvent(`Probe pixel (${x}, ${y})`, { source: 'Probe' });
         scheduleMiniMapWindowSync();
     });

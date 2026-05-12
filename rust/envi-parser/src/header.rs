@@ -1,9 +1,9 @@
 // src/header.rs
 use crate::error::EnviError;
-use serde::{Serialize, Deserialize};
-use wasm_bindgen::prelude::*;
-use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
+use wasm_bindgen::prelude::*;
 
 // Interleave 枚举需要暴露给 JS，保留 #[wasm_bindgen]
 #[wasm_bindgen]
@@ -52,22 +52,40 @@ impl ByteOrder {
 #[wasm_bindgen]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum DataType {
-    U8, I16, I32, F32, F64, ComplexF32, ComplexF64, U16, U32, I64, U64,
+    U8,
+    I16,
+    I32,
+    F32,
+    F64,
+    ComplexF32,
+    ComplexF64,
+    U16,
+    U32,
+    I64,
+    U64,
 }
 
 impl DataType {
     pub fn from_code(code: i32) -> Result<Self, EnviError> {
         match code {
-            1 | 16 => Ok(DataType::U8), 2 => Ok(DataType::I16), 3 => Ok(DataType::I32),
-            4 => Ok(DataType::F32), 5 => Ok(DataType::F64), 6 => Ok(DataType::ComplexF32),
-            9 => Ok(DataType::ComplexF64), 12 => Ok(DataType::U16), 13 => Ok(DataType::U32),
-            14 => Ok(DataType::I64), 15 => Ok(DataType::U64),
+            1 | 16 => Ok(DataType::U8),
+            2 => Ok(DataType::I16),
+            3 => Ok(DataType::I32),
+            4 => Ok(DataType::F32),
+            5 => Ok(DataType::F64),
+            6 => Ok(DataType::ComplexF32),
+            9 => Ok(DataType::ComplexF64),
+            12 => Ok(DataType::U16),
+            13 => Ok(DataType::U32),
+            14 => Ok(DataType::I64),
+            15 => Ok(DataType::U64),
             _ => Err(EnviError::UnsupportedDataType(code)),
         }
     }
     pub fn byte_size(&self) -> usize {
         match self {
-            DataType::U8 => 1, DataType::I16 | DataType::U16 => 2,
+            DataType::U8 => 1,
+            DataType::I16 | DataType::U16 => 2,
             DataType::I32 | DataType::U32 | DataType::F32 => 4,
             DataType::F64 | DataType::I64 | DataType::U64 | DataType::ComplexF32 => 8,
             DataType::ComplexF64 => 16,
@@ -104,7 +122,6 @@ pub struct EnviHeader {
 impl EnviHeader {
     // 这个 to_js 方法现在只在 crate 内部使用，由 EnviReader 调用
     pub fn to_js(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(self)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        serde_wasm_bindgen::to_value(self).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }

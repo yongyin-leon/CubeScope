@@ -52,6 +52,8 @@ import { createEnviLoadSource } from '../sources/load-source.js';
 import { serializeDataSource } from '../sources/data-source.js';
 import { CubeStore } from '../store/cube-store.js';
 
+const MAX_WORKER_REQUEST_RETRIES = 1;
+
 // A simple, self-contained event emitter class to handle decoupling.
 class EventEmitter {
     constructor() { this.events = {}; }
@@ -90,6 +92,9 @@ export class ViewerRuntime extends EventEmitter {
     #workExecutor;
     #pendingSpectrumResolvers = new Map();
     #requestTracker = new RequestTracker();
+    #activeWorkerRequests = new Map();
+    #workerRecoveryQueue = [];
+    #workerRecoveryPromise = null;
     #activeSourceId = 0;
     #rendererPreference;
     #pendingRendererRecoveryDisabledKinds = null;
@@ -214,7 +219,7 @@ export class ViewerRuntime extends EventEmitter {
                 }
                 if (this.#workScheduler.hasIdleWorker()) {
                     const worker = this.#workScheduler.takeIdleWorker();
-                    worker.postMessage(spectrumRequest.envelope);
+                    this.#postTrackedWorkerRequest(worker, spectrumRequest);
                 } else {
                     setTimeout(dispatch, 200);
                 }
@@ -566,8 +571,8 @@ export class ViewerRuntime extends EventEmitter {
                 onRuntimeMessage: (event) => {
                     this.#handleWorkerMessage(event);
                 },
-                onWorkerFatalError: (error) => {
-                    this.emit('log', `A worker encountered a fatal error: ${error.message}`);
+                onWorkerFatalError: (error, worker) => {
+                    this.#handleWorkerFatalError(error, worker);
                 },
             });
             this.emit('log', `${this.#workScheduler.getIdleWorkerCount()} workers initialized and ready.`);
@@ -580,6 +585,9 @@ export class ViewerRuntime extends EventEmitter {
 
     #handleWorkerMessage(e) {
         const message = normalizeWorkerRuntimeMessage(e);
+        if (message.worker) {
+            this.#activeWorkerRequests.delete(message.worker);
+        }
         if (message.requestId) {
             this.#requestTracker.release(message.sourceId, message.requestId);
         }
@@ -773,6 +781,107 @@ export class ViewerRuntime extends EventEmitter {
         }
     }
 
+    #handleWorkerFatalError(error, worker) {
+        const message = error?.message ?? 'Unknown worker error';
+        const activeEntry = worker ? this.#activeWorkerRequests.get(worker) : null;
+
+        if (worker) {
+            this.#activeWorkerRequests.delete(worker);
+            this.#workScheduler.removeWorker(worker);
+        }
+
+        this.emit('log', `A worker encountered a fatal error: ${message}`);
+        this.emit('error', `Worker fatal error: ${message}`);
+
+        if (activeEntry) {
+            this.#queueFailedWorkerRequestForRetry(activeEntry, message);
+        }
+
+        if (this.#workerPool.size() === 0) {
+            this.#recoverWorkerPoolAfterFatal(message);
+            return;
+        }
+
+        this.#drainWorkerRecoveryQueue();
+    }
+
+    #queueFailedWorkerRequestForRetry({ request, attempts = 0 }, message) {
+        if (!request?.requestId || request.sourceId !== this.#activeSourceId) {
+            return;
+        }
+
+        this.#requestTracker.release(request.sourceId, request.requestId);
+
+        if (attempts >= MAX_WORKER_REQUEST_RETRIES) {
+            this.#failWorkerRecoveryRequest(request, `Worker request failed after retry: ${message}`);
+            return;
+        }
+
+        this.#workerRecoveryQueue.push({
+            request,
+            attempts: attempts + 1,
+        });
+    }
+
+    #failWorkerRecoveryRequest(request, message) {
+        const resolver = this.#pendingSpectrumResolvers.get(request.requestId);
+        if (resolver) {
+            resolver.reject(new Error(message));
+            this.#pendingSpectrumResolvers.delete(request.requestId);
+            return;
+        }
+
+        this.emit('error', message);
+    }
+
+    #drainWorkerRecoveryQueue() {
+        while (this.#workerRecoveryQueue.length > 0 && this.#workScheduler.hasIdleWorker()) {
+            const entry = this.#workerRecoveryQueue.shift();
+            const { request, attempts } = entry;
+
+            if (!request?.requestId || request.sourceId !== this.#activeSourceId) {
+                continue;
+            }
+
+            const worker = this.#workScheduler.takeIdleWorker();
+            if (!worker) {
+                this.#workerRecoveryQueue.unshift(entry);
+                return;
+            }
+
+            this.#postTrackedWorkerRequest(worker, request, { attempts });
+        }
+    }
+
+    #recoverWorkerPoolAfterFatal(reason) {
+        if (this.#workerRecoveryPromise) {
+            return this.#workerRecoveryPromise;
+        }
+
+        this.#workerRecoveryPromise = (async () => {
+            try {
+                this.emit('log', `Reinitializing worker pool after fatal worker error: ${reason}`);
+                this.#workScheduler.resetWorkers();
+                await this.#initWorkers();
+                this.#drainWorkerRecoveryQueue();
+                this.#processTileRequestQueue();
+                this.#processBackgroundStatsQueue();
+                this.#processPreloadQueue();
+            } catch (recoveryError) {
+                const message = `Worker pool recovery failed: ${recoveryError.message}`;
+                this.emit('error', message);
+                const queuedEntries = this.#workerRecoveryQueue.splice(0);
+                for (const { request } of queuedEntries) {
+                    this.#failWorkerRecoveryRequest(request, message);
+                }
+            } finally {
+                this.#workerRecoveryPromise = null;
+            }
+        })();
+
+        return this.#workerRecoveryPromise;
+    }
+
     #registerIdleWorkerAndDrain(worker, {
         tiles = false,
         stats = false,
@@ -781,6 +890,8 @@ export class ViewerRuntime extends EventEmitter {
         if (worker) {
             this.#workScheduler.registerIdleWorker(worker);
         }
+
+        this.#drainWorkerRecoveryQueue();
 
         if (tiles) {
             this.#processTileRequestQueue();
@@ -793,11 +904,12 @@ export class ViewerRuntime extends EventEmitter {
         }
     }
 
-    #postTrackedWorkerRequest(worker, request) {
+    #postTrackedWorkerRequest(worker, request, { attempts = 0 } = {}) {
         if (request.requestId) {
             this.#requestTracker.track(request.sourceId, request.requestId);
         }
 
+        this.#activeWorkerRequests.set(worker, { request, attempts });
         worker.postMessage(request.envelope);
     }
 
@@ -1041,6 +1153,8 @@ export class ViewerRuntime extends EventEmitter {
             resetRuntimePolicy: () => this.#runtimePolicy.reset(),
             resetRenderSession: () => this.#renderSession.resetSourceState(),
         });
+        this.#activeWorkerRequests.clear();
+        this.#workerRecoveryQueue = [];
     }
 
     #getAspectRatioCorrection() {

@@ -266,6 +266,68 @@ class CubeViewer extends EventEmitter {
     }
 
     /**
+     * EN: Gets a JSON-safe pixel probe snapshot for export or reproducibility notes.
+     * ZH: 获取可用于导出或复现实验记录的像素探针快照。
+     * @param {number} x The zero-based image x coordinate.
+     * @param {number} y The zero-based image y coordinate.
+     * @returns {Promise<object|null>} A serializable probe snapshot, or null if unavailable.
+     */
+    async getPixelProbe(x, y) {
+        const header = this.#header;
+        if (!header) {
+            return null;
+        }
+
+        const pixelX = Number(x);
+        const pixelY = Number(y);
+        if (
+            !Number.isInteger(pixelX)
+            || !Number.isInteger(pixelY)
+            || pixelX < 0
+            || pixelY < 0
+            || pixelX >= header.samples
+            || pixelY >= header.lines
+        ) {
+            return null;
+        }
+
+        const profile = await this.getSpectralProfile(pixelX, pixelY);
+        if (!profile) {
+            return null;
+        }
+
+        const wavelengths = Array.isArray(header.wavelength) ? header.wavelength : [];
+        const spectrum = Object.freeze(Array.from(profile, (value, index) => Object.freeze({
+            band: index + 1,
+            wavelength: Number.isFinite(Number(wavelengths[index])) ? Number(wavelengths[index]) : undefined,
+            value: Number(value),
+        })));
+        const viewport = this.getViewportState();
+
+        return Object.freeze({
+            pixel: Object.freeze({ x: pixelX, y: pixelY }),
+            world: this.pixelToWorld(pixelX, pixelY),
+            spectrum,
+            header: Object.freeze({
+                samples: header.samples,
+                lines: header.lines,
+                bands: header.bands,
+                interleave: header.interleave,
+                dataType: header.dataType,
+                byteOrder: header.byteOrder,
+            }),
+            viewport: viewport
+                ? Object.freeze({
+                    ...viewport,
+                    visibleBounds: viewport.visibleBounds
+                        ? Object.freeze({ ...viewport.visibleBounds })
+                        : null,
+                })
+                : null,
+        });
+    }
+
+    /**
      * EN: Maps a zero-based image pixel coordinate into source world coordinates when affine metadata exists.
      * ZH: 当存在仿射空间元数据时，将零基影像像素坐标映射为源数据世界坐标。
      * @param {number} x The zero-based image x coordinate.

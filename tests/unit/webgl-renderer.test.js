@@ -152,6 +152,31 @@ describe('WebGlRenderer', () => {
         expect(harness.gl.drawArrays).toHaveBeenCalled();
     });
 
+    it('uses the renderer input tileSize when positioning tiles', async () => {
+        const harness = createFakeWebGlContext();
+        const renderer = new WebGlRenderer(createCanvas(harness.gl));
+
+        await renderer.init();
+        renderer.storeTile({
+            sourceId: 1,
+            header: { samples: 8, lines: 4 },
+            tilePayload: {
+                ...createTilePayload(),
+                tile: { x: 1, y: 0 },
+            },
+        });
+        renderer.render(createRendererInput({
+            sourceId: 1,
+            header: { samples: 8, lines: 4 },
+            tiles: [{ x: 1, y: 0 }],
+            tileSize: 2,
+        }));
+
+        const offsetCall = harness.gl.uniform2fv.mock.calls
+            .find(([location]) => location?.name === 'uOffset');
+        expect(Array.from(offsetCall[1])).toEqual([-0.25, 0.25]);
+    });
+
     it('releases textures on source disposal and destroy', async () => {
         const harness = createFakeWebGlContext();
         const renderer = new WebGlRenderer(createCanvas(harness.gl));

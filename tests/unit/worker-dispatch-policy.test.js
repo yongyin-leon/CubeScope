@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorkerCommand } from '../../src/protocol/worker-protocol.js';
+import {
+    WORKER_PROTOCOL_VERSION,
+    WorkerCommand,
+} from '../../src/protocol/worker-protocol.js';
 import {
     buildSpectrumWorkerRequest,
     buildStatsWorkerRequest,
@@ -77,6 +80,7 @@ describe('worker-dispatch-policy', () => {
             wasmJsPath: 'file:///worker.js',
             wasmWasmPath: 'file:///worker.wasm',
         })).toEqual({
+            protocolVersion: WORKER_PROTOCOL_VERSION,
             type: WorkerCommand.INIT,
             sourceId: 0,
             payload: {
@@ -90,6 +94,7 @@ describe('worker-dispatch-policy', () => {
             requestId: 'tile:8:visible:0,0:30,20,10',
             reason: 'source-switch',
         })).toEqual({
+            protocolVersion: WORKER_PROTOCOL_VERSION,
             type: WorkerCommand.CANCEL,
             sourceId: 8,
             requestId: 'tile:8:visible:0,0:30,20,10',

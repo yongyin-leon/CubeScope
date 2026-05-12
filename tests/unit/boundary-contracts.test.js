@@ -265,6 +265,7 @@ describe('minimal runtime boundary contracts', () => {
             viewState: { scale: 1.5 },
             layers: [{ id: 'rgb' }],
             tiles: [{ x: 0, y: 1 }],
+            tileSize: 256,
             clearMode: 'load',
         });
 
@@ -275,6 +276,7 @@ describe('minimal runtime boundary contracts', () => {
         expect(rendererInput.viewState).toEqual({ scale: 1.5 });
         expect(rendererInput.layers).toEqual([{ id: 'rgb' }]);
         expect(rendererInput.tiles).toEqual([{ x: 0, y: 1 }]);
+        expect(rendererInput.tileSize).toBe(256);
         expect(rendererInput.clearMode).toBe('load');
         expect(Object.isFrozen(rendererInput)).toBe(true);
         expect(Object.isFrozen(rendererInput.layers)).toBe(true);

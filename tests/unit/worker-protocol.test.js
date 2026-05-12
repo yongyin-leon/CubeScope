@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     ProgressType,
+    WORKER_PROTOCOL_VERSION,
     WorkerCommand,
     WorkerResponse,
     createWorkerError,
@@ -45,6 +46,7 @@ describe('worker protocol contracts', () => {
         });
 
         expect(envelope).toEqual({
+            protocolVersion: WORKER_PROTOCOL_VERSION,
             type: WorkerCommand.LOAD_TILE,
             sourceId: 3,
             requestId: 'tile:3:0,0',
@@ -64,6 +66,7 @@ describe('worker protocol contracts', () => {
                 bands: [1, 2, 3],
             },
         })).toEqual({
+            protocolVersion: WORKER_PROTOCOL_VERSION,
             type: WorkerResponse.TILE_COMPLETE,
             sourceId: 3,
             requestId: 'tile:3:0,0',
@@ -78,6 +81,7 @@ describe('worker protocol contracts', () => {
             requestId: 'tile:3:0,0',
             message: 'boom',
         })).toEqual({
+            protocolVersion: WORKER_PROTOCOL_VERSION,
             type: WorkerResponse.ERROR,
             sourceId: 3,
             requestId: 'tile:3:0,0',
@@ -94,6 +98,7 @@ describe('worker protocol contracts', () => {
             requestId: 'tile:3:0,0',
             tile: { x: 0, y: 0 },
         })).toEqual({
+            protocolVersion: WORKER_PROTOCOL_VERSION,
             type: WorkerCommand.LOAD_TILE,
             sourceId: 3,
             requestId: 'tile:3:0,0',
@@ -102,5 +107,20 @@ describe('worker protocol contracts', () => {
             },
         });
         expect(ProgressType.STATS_CALCULATION).toBe('stats_calculation');
+    });
+
+    it('rejects envelopes from unsupported protocol versions', () => {
+        expect(isWorkerEnvelope({
+            protocolVersion: WORKER_PROTOCOL_VERSION + 1,
+            type: WorkerCommand.LOAD_TILE,
+            sourceId: 1,
+            payload: {},
+        })).toBe(false);
+
+        expect(isWorkerEnvelope({
+            type: WorkerCommand.LOAD_TILE,
+            sourceId: 1,
+            payload: {},
+        })).toBe(false);
     });
 });
