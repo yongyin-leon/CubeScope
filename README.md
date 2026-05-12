@@ -359,7 +359,9 @@ core that future analysis plugins and downstream applications can build on.
 
 - npm identity: `@cubescope/web`
 - release target: `0.1.0-alpha.1`
-- repository visibility: private until the alpha acceptance gates pass
+- repository visibility: private until the author-approved public release switch
+  before SoftwareX submission; the local alpha acceptance gate passed on
+  `2026-05-12`
 - package format: ESM-only
 - current browser target: prefer WebGPU, with a WebGL compatibility renderer available
 - `rendererPreference: 'auto'` now degrades to WebGL for the rest of the viewer

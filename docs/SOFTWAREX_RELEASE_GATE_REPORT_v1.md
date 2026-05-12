@@ -1,6 +1,6 @@
 # SoftwareX Release Gate Report v1
 
-Generated from `npm run verify:alpha` on `2026-05-04`.
+Generated from `npm run verify:alpha` on `2026-05-12`.
 
 ## Verdict
 
@@ -36,10 +36,10 @@ items and repository-publication decision.
 
 | Test group | Result |
 | --- | --- |
-| Unit tests | `31` files, `129` tests passed |
+| Unit tests | `32` files, `135` tests passed |
 | Smoke tests | `4` tests passed |
 | Sample catalog smoke | `1` test passed |
-| Rust parser tests | `6` tests passed |
+| Rust parser tests | `7` tests passed |
 | Browser matrix | Chromium, Firefox, and WebKit `4/4` scenarios passed, `0` warnings |
 
 ## Benchmark Snapshot
@@ -48,8 +48,8 @@ The deterministic fixture was `48 x 48 x 32` with `bsq` interleave.
 
 | Scenario | Header parse | Initial view | Band switch |
 | --- | ---: | ---: | ---: |
-| Local file/blob | `6.5 ms` | `26.2 ms` | `8.4 ms` |
-| Same-origin HTTP range | `6.1 ms` | `29.9 ms` | `15.2 ms` |
+| Local file/blob | `4.9 ms` | `20.0 ms` | `5.6 ms` |
+| Same-origin HTTP range | `4.0 ms` | `17.8 ms` | `9.1 ms` |
 
 These values are local validation outputs and should not be presented as a
 hardware-independent comparative benchmark.
@@ -61,10 +61,10 @@ hardware-independent comparative benchmark.
 | Item | Value |
 | --- | --- |
 | Tarball | `cubescope-web-0.1.0-alpha.1.tgz` |
-| Packed size | `264121` bytes |
-| Unpacked size | `1291282` bytes |
+| Packed size | `269302` bytes |
+| Unpacked size | `1315070` bytes |
 | Entry count | `23` |
-| Integrity | `sha512-dbhx3z327Ee1sXaMnzJPXEJck1571xnAM8FsiV7h0HaN4zzcJFZ0SJuKGSaM2ooU85Ivj6qIfLRAe3gyzzptKQ==` |
+| Integrity | `sha512-QZy1M5F53n8Yf9bIJhVZpPxz8etNpoLIwBAzxReiSdwTH2cf3hSWDLiMgd5wKQjsqJkjeeJbBpZFV4lvAykY3A==` |
 
 Verified public exports:
 
@@ -88,9 +88,10 @@ Verified package assets:
 
 ## Remaining Release Decisions
 
-- Make the GitHub repository public before submission.
-- Decide whether to publish/tag exactly `0.1.0-alpha.1` or create a new
-  manuscript release tag after final metadata edits.
+- Make the GitHub repository public before submission; remote status was still
+  `private` on `2026-05-12`.
+- Publish/tag exactly `0.1.0-alpha.1` unless a new metadata-only release tag is
+  chosen before archival.
 - Decide whether to archive the release through Zenodo or another DOI provider.
 - Confirm external CI if desired; local Node 22 verification is passed, but
   external CI remains explicitly deferred.

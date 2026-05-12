@@ -2,7 +2,7 @@
 
 Status snapshot:
 
-- local alpha verification completed on `2026-04-23`
+- local alpha verification completed on `2026-05-12` via `npm run verify:alpha`
 - local verification artifacts now include benchmark, browser-matrix,
   pack-consumer, and alpha summary reports under `output/`
 - shipped remote-sample validation now includes both the deterministic local
@@ -31,7 +31,8 @@ Status snapshot:
 - [x] registered remote-sample catalog is locally validated
 - [ ] GitHub Actions CI is green on Node 22 when the project is ready for that external gate
 - [x] `npm run verify:node22-local` passes when a local Node 22 runtime is available
-- [x] repository remains private while external release gates are still pending
+- [x] repository remains private only until the author-approved public release
+  switch before SoftwareX submission
 
 ## Deferred External Gate
 
