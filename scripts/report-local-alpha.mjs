@@ -188,7 +188,7 @@ const summary = {
         browserMatrixLocal: browserMatrix?.summary?.overallStatus ?? 'pending',
         node22LocalRuntime: node22LocalRuntimeStatus,
         node22ExternalCi: 'deferred',
-        repositoryVisibility: 'private',
+        repositoryVisibility: 'public',
     },
     notes: [
         'This summary captures the locally verified alpha gate only.',
@@ -202,7 +202,7 @@ const summary = {
             ? `The local browser matrix currently reports ${browserMatrix.summary?.overallStatus ?? 'unknown'}; verified browsers: ${(browserMatrix.summary?.verifiedBrowsers ?? []).join(', ') || 'none'}, skipped optional scenarios: ${browserMatrix.summary?.skipped ?? 0}.`
             : 'A local browser-matrix report has not been generated yet.',
         buildNode22Note(),
-        'Node 22 remains the target toolchain for public release, but external CI confirmation is intentionally deferred for now.',
+        'The GitHub repository and v0.1.0-alpha.1 release are public; external CI confirmation remains intentionally deferred for now.',
     ],
 };
 

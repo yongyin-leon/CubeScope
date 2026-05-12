@@ -1,6 +1,6 @@
 # SoftwareX Cover Letter Draft v2
 
-Date: `2026-04-23`
+Date: `2026-05-12`
 
 To the Editors of `SoftwareX`,
 
@@ -36,8 +36,12 @@ of `SoftwareX`, which emphasize inspectable and reusable research software.
 
 At the time of submission, we plan to provide:
 
-- a public GitHub repository URL for the software package
-- the tagged release associated with the manuscript
+- the public GitHub repository URL for the software package:
+  `https://github.com/yongyin-leon/CubeScope`
+- the tagged release associated with the manuscript:
+  `https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1`
+- the Zenodo software archive DOI:
+  `https://doi.org/10.5281/zenodo.20131367`
 - license and citation metadata
 - the manuscript in the required journal template
 - the declarations, data statement, and any optional highlights or graphical
@@ -45,20 +49,20 @@ At the time of submission, we plan to provide:
 
 This manuscript is not under consideration elsewhere. All authors will approve
 the submitted version and the associated submission metadata. Funding,
-conflict-of-interest, authorship, CRediT, and any generative-AI disclosure
-statements will be finalized in the submission package in accordance with the
-journal's requirements.
+conflict-of-interest, authorship, CRediT, and generative-AI disclosure
+statements are included in the manuscript draft and can be adjusted in the
+submission system if required.
 
 Thank you for your consideration.
 
 Sincerely,
 
-`Yongyin Leon Li`
+`Yongyin Li`
 
-`[Affiliation]`
+`107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China`
 
 `[Email]`
 
-`[Postal address]`
+`107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China`
 
 `[Phone number]`

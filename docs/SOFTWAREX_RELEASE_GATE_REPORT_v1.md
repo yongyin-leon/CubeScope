@@ -88,11 +88,9 @@ Verified package assets:
 
 ## Remaining Release Decisions
 
-- Make the GitHub repository public before submission; remote status was still
-  `private` on `2026-05-12`.
-- Publish/tag exactly `0.1.0-alpha.1` unless a new metadata-only release tag is
-  chosen before archival.
-- Decide whether to archive the release through Zenodo or another DOI provider.
+- GitHub repository is public.
+- Release tag `v0.1.0-alpha.1` is published.
+- Zenodo archive DOI is `10.5281/zenodo.20131367`.
 - Confirm external CI if desired; local Node 22 verification is passed, but
   external CI remains explicitly deferred.
 - Keep local real hyperspectral datasets excluded from Git.

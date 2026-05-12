@@ -45,6 +45,7 @@
     "figure:softwarex-real-envi": "node scripts/build-softwarex-real-envi-montage.mjs",
     "check:softwarex-submission": "node scripts/check-softwarex-submission.mjs",
     "build:softwarex-pdf": "node scripts/build-softwarex-pdf.mjs",
+    "package:softwarex-submission": "node scripts/package-softwarex-submission.mjs",
     "verify:alpha": "npm run fixtures:generate && npm run build && npm run test && npm run report:toolchain && npm run report:browser-matrix && npm run benchmark && npm run validate:samples && npm run verify:pack && npm run report:alpha"
   },
   "keywords": [

@@ -1,7 +1,7 @@
-# CubeScope `0.1.0-alpha.1` Release Notes Draft
+# CubeScope `0.1.0-alpha.1` Release Notes
 
-This draft is prepared for the SoftwareX submission release candidate. It is
-not a Git tag or public release by itself.
+This release is archived on Zenodo as
+[`10.5281/zenodo.20131367`](https://doi.org/10.5281/zenodo.20131367).
 
 ## Summary
 
@@ -30,11 +30,11 @@ fallback.
 
 ## Verification Snapshot
 
-Latest local release gate: `npm run verify:alpha` on `2026-04-24`.
+Latest local release gate: `npm run verify:alpha` on `2026-05-12`.
 
 | Gate | Status |
 | --- | --- |
-| Unit tests | `129/129` passed |
+| Unit tests | `135/135` passed |
 | Smoke tests | `4/4` passed |
 | Sample catalog smoke | `1/1` passed |
 | Browser matrix | Chromium, Firefox, and WebKit `4/4` scenarios passed |
@@ -54,8 +54,8 @@ Deterministic fixture benchmark snapshot:
 
 | Scenario | Header parse | Initial view | Band switch |
 | --- | ---: | ---: | ---: |
-| Local file/blob | `6.5 ms` | `26.2 ms` | `8.4 ms` |
-| Same-origin HTTP range | `6.1 ms` | `29.9 ms` | `15.2 ms` |
+| Local file/blob | `4.9 ms` | `20.0 ms` | `5.6 ms` |
+| Same-origin HTTP range | `4.0 ms` | `17.8 ms` | `9.1 ms` |
 
 These values are local validation outputs rather than hardware-independent
 comparative performance claims.
@@ -65,8 +65,8 @@ comparative performance claims.
 `npm pack` verification produced:
 
 - Tarball: `cubescope-web-0.1.0-alpha.1.tgz`
-- Packed size: `264121` bytes
-- Unpacked size: `1291282` bytes
+- Packed size: `269302` bytes
+- Unpacked size: `1315070` bytes
 - Entries: `23`
 
 Verified public exports:
@@ -100,11 +100,11 @@ Verified package assets:
 - Real-data screenshots used in the manuscript are generated from local
   datasets that are not redistributed with the repository.
 
-## Before Public Release
+## Permanent Links
 
-- Confirm the repository is public.
-- Confirm the release tag to use for the manuscript.
-- Confirm support email and final author metadata.
-- Confirm screenshot permissions/provenance for local real ENVI validation
-  imagery.
-- Add DOI/archive URL if a permanent release identifier is created.
+- GitHub repository: <https://github.com/yongyin-leon/CubeScope>
+- GitHub release: <https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1>
+- Zenodo DOI: <https://doi.org/10.5281/zenodo.20131367>
+- Recommended citation: Li, Y. (2026). *CubeScope: browser-native ENVI
+  hyperspectral viewer kernel*. Zenodo.
+  <https://doi.org/10.5281/zenodo.20131367>

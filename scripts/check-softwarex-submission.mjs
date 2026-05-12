@@ -15,6 +15,7 @@ const paths = {
   realEnviFigure: 'docs/figures/softwarex-real-envi-initial-views.png',
   highlights: 'docs/SOFTWAREX_HIGHLIGHTS_v1.txt',
   coverLetter: 'docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md',
+  submissionManifest: 'docs/SOFTWAREX_FINAL_SUBMISSION_MANIFEST_v1.md',
   citation: 'CITATION.cff',
   report: 'docs/SOFTWAREX_SUBMISSION_READINESS_REPORT_v1.md',
   releaseGateReport: 'docs/SOFTWAREX_RELEASE_GATE_REPORT_v1.md',
@@ -57,7 +58,7 @@ function listTrackedRealData() {
 }
 
 function placeholderMatches(text) {
-  const matches = text.match(/\[[^\]\n]*(To be completed|Affiliation|Email|Postal address|Phone number|DOI|NAME OF TOOL|REASON)[^\]\n]*\]/g);
+  const matches = text.match(/\[[^\]\n]*(To be completed|Affiliation|Email|Postal address|Phone number|DOI|NAME OF TOOL|REASON|Add any)[^\]\n]*\]/g);
   return matches ? [...new Set(matches)] : [];
 }
 
@@ -66,6 +67,8 @@ const latexDraft = await read(paths.latexDraft);
 const coverLetter = await read(paths.coverLetter);
 const highlights = await read(paths.highlights);
 const citation = await read(paths.citation);
+const zenodoDoi = '10.5281/zenodo.20131367';
+const releaseUrl = 'https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1';
 
 const checks = [];
 const manual = [];
@@ -85,6 +88,7 @@ for (const [item, relativePath] of [
   ['Real ENVI montage PNG', paths.realEnviFigure],
   ['Highlights file', paths.highlights],
   ['Cover letter draft', paths.coverLetter],
+  ['Final submission manifest', paths.submissionManifest],
   ['Citation metadata', paths.citation],
   ['Release gate report', paths.releaseGateReport],
   ['Release notes draft', paths.releaseNotes],
@@ -119,9 +123,9 @@ checks.push({
 });
 
 checks.push({
-  status: citation.includes('Yongyin Leon') && citation.includes('0.1.0-alpha.1') ? 'PASS' : 'WARN',
+  status: citation.includes('Yongyin') && citation.includes('0.1.0-alpha.1') && citation.includes(zenodoDoi) ? 'PASS' : 'WARN',
   item: 'CITATION metadata baseline',
-  detail: 'CITATION.cff includes author and version metadata; verify release date at final tag.',
+  detail: 'CITATION.cff includes author, version, release date, repository, and Zenodo DOI metadata.',
 });
 
 if (existsSync(repoPath(paths.alphaSummary))) {
@@ -165,10 +169,16 @@ manual.push({
   detail: 'Confirm screenshot reuse terms for Pika IR-L Hyalite Creek, WHU-Hi LongKou, EHU/GIC scenes, and any retained public remote sample.',
 });
 
+const releaseArchiveFinalized = manuscript.includes(zenodoDoi)
+  && latexDraft.includes(zenodoDoi)
+  && citation.includes(zenodoDoi)
+  && latexDraft.includes(releaseUrl);
 manual.push({
-  status: 'MANUAL',
+  status: releaseArchiveFinalized ? 'PASS' : 'MANUAL',
   item: 'Release/archive finalization',
-  detail: 'Confirm repository is public, create/freeze the public release tag, and add DOI/archive URL if available.',
+  detail: releaseArchiveFinalized
+    ? `Public GitHub release and Zenodo DOI are recorded: ${releaseUrl}; https://doi.org/${zenodoDoi}.`
+    : 'Confirm repository is public, create/freeze the public release tag, and add DOI/archive URL if available.',
 });
 
 const now = new Date().toISOString();
@@ -195,7 +205,7 @@ const lines = [
   '',
   checks.some((entry) => entry.status === 'FAIL')
     ? 'Resolve the automated `FAIL` items before template finalization.'
-    : 'Automated checks are clear. The remaining work is author metadata, declarations, release/archive decisions, and final dataset-permission wording.',
+    : 'Automated checks are clear. The remaining work is author contact metadata and final dataset-permission wording.',
   '',
 ];
 

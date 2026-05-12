@@ -1,14 +1,16 @@
 cff-version: 1.2.0
-title: "CubeScope"
+title: "CubeScope: browser-native ENVI hyperspectral viewer kernel"
 message: "If you use CubeScope in academic work, please cite the software release and repository."
 type: software
 authors:
   - family-names: "Li"
-    given-names: "Yongyin Leon"
+    given-names: "Yongyin"
 repository-code: "https://github.com/yongyin-leon/CubeScope"
+url: "https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1"
+doi: "10.5281/zenodo.20131367"
 license: "MIT"
 version: "0.1.0-alpha.1"
-date-released: 2026-04-17
+date-released: 2026-05-12
 abstract: >
   CubeScope is a browser-native, local-first, hardware-accelerated viewer kernel
   for ENVI hyperspectral datasets, built around Rust/WASM, workers, and WebGPU.

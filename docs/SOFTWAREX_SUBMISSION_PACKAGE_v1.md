@@ -3,7 +3,8 @@
 This document turns the current manuscript draft into a SoftwareX-oriented
 submission package plan.
 
-Checked against the official SoftwareX guide on `2026-04-23`:
+Checked against the official SoftwareX guide on `2026-04-23` and rechecked on
+`2026-05-12`:
 
 - Guide for authors:
   [https://www.sciencedirect.com/journal/softwarex/publish/guide-for-authors](https://www.sciencedirect.com/journal/softwarex/publish/guide-for-authors)
@@ -20,10 +21,10 @@ CubeScope is a strong thematic fit for SoftwareX because the project is:
 - supported by citation metadata, reproducibility workflows, and an embeddable
   software package
 
-The current project state is already close to a submission candidate, but not
-yet fully submission-ready. The main reason is no longer missing software
-evidence; it is that the manuscript and release package still need final
-submission shaping.
+The current project state is now close to a submission candidate. The main
+reason it is not yet fully submission-ready is no longer missing software
+evidence or release infrastructure; it is a short set of author-controlled
+final fields and dataset-permission wording that should not be guessed.
 
 ## Official Requirements And Recommendations To Respect
 
@@ -123,8 +124,9 @@ Current word-count snapshot from the repository draft:
 - more submission-ready SoftwareX manuscript:
   `docs/SOFTWAREX_MANUSCRIPT_v3.md`, about `1770` words
 - more template-aware submission package manuscript:
-  `docs/SOFTWAREX_MANUSCRIPT_v4.md`, about `2805` words before references
-  after adding local real-ENVI validation evidence and candidate citations
+  `docs/SOFTWAREX_MANUSCRIPT_v4.md`, about `2975` words before references
+  after final release metadata, DOI, declarations, and local real-ENVI
+  validation evidence
 
 Interpretation:
 
@@ -162,18 +164,18 @@ item as `PASS`, `FAIL`, or `UNCLEAR` against the current repository state.
 | Short descriptive manuscript within `3000` words | `PASS` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` is the current short-manuscript base and remains below the limit | Keep the short manuscript as the submission base |
 | Abstract not exceeding `250` words | `PASS` | Abstract in `docs/SOFTWAREX_MANUSCRIPT_v4.md` is about `197` words | Final copyediting only |
 | `1-7` English keywords | `PASS` | Seven keywords are listed in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final wording review only |
-| Title page with authors, affiliations, corresponding author | `UNCLEAR` | Placeholder fields exist in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Fill in real author metadata before template conversion |
-| CRediT author statement | `UNCLEAR` | Placeholder block exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Finalize contributor roles |
-| Funding statement | `UNCLEAR` | Placeholder block exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Confirm funding or insert no-funding statement |
-| Conflict-of-interest declaration | `PASS` | Draft statement exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Confirm final wording with authors |
-| Generative-AI disclosure | `UNCLEAR` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` now records the journal rule that the section should only be included if disclosure is needed | Decide final disclosure wording or remove the section if not needed |
-| Data statement | `PASS` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` now contains a dedicated data statement section | Align final wording with the public repository and release archive |
+| Title page with authors, affiliations, corresponding author | `MANUAL` | Author name, affiliation, corresponding author, postal address, and no-ORCID note are filled in `docs/SOFTWAREX_MANUSCRIPT_v4.md`; email and phone remain open | Fill in corresponding-author email and phone number |
+| CRediT author statement | `PASS` | Single-author CRediT statement is filled in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final author confirmation only |
+| Funding statement | `PASS` | No-specific-grant funding statement is filled in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final author confirmation only |
+| Conflict-of-interest declaration | `PASS` | No-competing-interests statement exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final author confirmation only |
+| Generative-AI disclosure | `PASS` | Elsevier-style AI disclosure is filled in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final author confirmation only |
+| Data statement | `MANUAL` | Dedicated data statement is present and excludes external real datasets from redistribution | Confirm final screenshot/data reuse wording for retained external scenes |
 | Highlights file | `PASS` | `docs/SOFTWAREX_HIGHLIGHTS_v1.txt` contains four bullets within the character limit | Final editorial polishing only |
 | Graphical abstract | `UNCLEAR` | Only a text concept is documented in this package | Decide whether to include the recommended graphical abstract and produce the actual image if yes |
-| Open-source repository and support material | `UNCLEAR` | Repository package is strong, but public release timing is still pending | Publish the repository at the chosen release moment |
-| Public release/tag suitable for archiving | `FAIL` | Release plan exists, but no archived public release is final yet | Create the public tag and archive metadata |
-| Journal-specific template formatting | `FAIL` | `docs/SOFTWAREX_MANUSCRIPT_v4.md` is template-aligned but not yet in the official template | Convert into the official Word or LaTeX template |
-| Software availability statement | `UNCLEAR` | Placeholder repository URL exists in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Insert public repository URL and release identifier |
+| Open-source repository and support material | `PASS` | Repository and release are public on GitHub; README, LICENSE, source, and support docs are present | Keep repository public through review |
+| Public release/tag suitable for archiving | `PASS` | GitHub release `v0.1.0-alpha.1` is public and archived on Zenodo with DOI `10.5281/zenodo.20131367` | Keep tag immutable unless a new release is intentionally made |
+| Journal-specific template formatting | `PASS` | `docs/softwarex-template/cubescope-softwarex-submission-draft.tex` is filled from the official LaTeX template | Build final PDF/source zip after contact metadata is filled |
+| Software availability statement | `PASS` | Public repository, release, license, package, and Zenodo DOI are listed in `docs/SOFTWAREX_MANUSCRIPT_v4.md` | Final author confirmation only |
 | Reproducibility/support evidence | `PASS` | Repository already contains alpha reports, browser matrix, benchmarks, sample validation, and pack verification outputs | Keep outputs organized and cite them in the final package |
 
 ## Required Submission Files
@@ -188,7 +190,7 @@ The package we should prepare for actual submission is:
 6. funding statement
 7. CRediT contribution statement
 8. public software repository URL
-9. tagged release or archived release metadata
+9. tagged release and archived release metadata
 10. data statement aligned with the final public repository and release archive
 
 ## Current Readiness By Item
@@ -218,6 +220,12 @@ The package we should prepare for actual submission is:
 - local real-ENVI montage figure generated:
   `docs/figures/softwarex-real-envi-initial-views.png`
 - citation metadata
+- public GitHub repository:
+  `https://github.com/yongyin-leon/CubeScope`
+- public GitHub release:
+  `https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1`
+- Zenodo DOI:
+  `https://doi.org/10.5281/zenodo.20131367`
 - claim/evidence audit drafted:
   `docs/SOFTWAREX_CLAIM_EVIDENCE_AUDIT_v1.md`
 - reference and dataset-provenance working notes drafted:
@@ -229,17 +237,16 @@ The package we should prepare for actual submission is:
 
 ### Still needs work before submission
 
-- convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official SoftwareX template
-- review and complete the LaTeX submission draft in
+- fill corresponding-author email and phone number in the manuscript, LaTeX
+  metadata tables, and cover letter
+- review and complete the support email in
   `docs/softwarex-template/cubescope-softwarex-submission-draft.tex`
 - verify the candidate citations and unresolved dataset provenance entries
   listed in `docs/SOFTWAREX_CLAIM_EVIDENCE_AUDIT_v1.md` and
   `docs/SOFTWAREX_REFERENCE_PROVENANCE_v1.md`
 - decide whether to submit a graphical abstract, then produce the actual image if yes
 - prepare the final highlights file in submission-ready form if we keep highlights
-- prepare the final cover letter
-- make the repository public at the correct moment
-- create the public release/tag and archive metadata
+- prepare the final cover letter contact block
 - add external CI evidence if we want the release package to look fully closed
 
 ## Suggested Final Submission Sequence
@@ -253,11 +260,16 @@ The package we should prepare for actual submission is:
 4. absorb additional guide-facing details such as the data statement and fuller title-page placeholders
    [completed through `docs/SOFTWAREX_MANUSCRIPT_v4.md`]
 5. verify and insert the final citation/provenance set
+   [mostly completed; remaining issue is dataset-permission wording]
 6. convert `docs/SOFTWAREX_MANUSCRIPT_v4.md` into the official journal template
+   [completed through `docs/softwarex-template/cubescope-softwarex-submission-draft.tex`]
 7. finalize highlights and decide whether to submit a graphical abstract
+   [highlights completed; graphical abstract remains optional]
 8. finalize cover letter and declarations
+   [declarations completed; cover-letter contact block remains]
 9. publish the repository and release tag
-10. submit the manuscript with the public repository URL
+   [completed with public GitHub release and Zenodo DOI]
+10. assemble the PDF/source zip and submit with the public repository URL
 
 ## Supporting Working Files
 
@@ -279,6 +291,8 @@ are now:
 - `docs/SOFTWAREX_SUBMISSION_FILL_IN_CHECKLIST_v1.md` as the final fill-in list
 - `docs/SOFTWAREX_RELEASE_GATE_REPORT_v1.md` as the latest local release-gate summary
 - `docs/SOFTWAREX_RELEASE_NOTES_0.1.0-alpha.1.md` as the release notes draft
+- `npm run package:softwarex-submission` as the local assembly command for the
+  manuscript PDF, LaTeX source zip, highlights, and cover-letter draft
 
 ## Honest Submission Posture
 

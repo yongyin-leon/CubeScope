@@ -21,8 +21,8 @@
 
 \title{CubeScope: a browser-native, local-first viewer kernel for ENVI hyperspectral datasets}
 
-\author{Yongyin Leon Li}
-\address{[To be completed with full postal addresses and country names]}
+\author{Yongyin Li}
+\address{107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China}
 
 \begin{abstract}
 CubeScope is a browser-native viewer kernel for ENVI hyperspectral datasets.
@@ -98,21 +98,17 @@ preprocess ENVI data offline, yet still lack a reusable browser-side viewer
 that preserves format semantics and supports practical interaction.
 
 CubeScope addresses this gap as a viewer kernel rather than as a complete
-analysis platform. The current software artifact focuses on browser-native,
-local-first ENVI viewing with a small embeddable API, validated rendering
-paths, and reproducibility-oriented release practice. This scope is narrow on
-purpose. The present contribution is not a full remote-sensing workbench, but a
-reusable foundation for scientific web applications that need hyperspectral
-viewing without immediately adopting a heavyweight backend stack.
+analysis platform. It focuses on browser-native, local-first ENVI viewing with
+a small embeddable API, validated rendering paths, and reproducibility-oriented
+release practice. The contribution is a reusable foundation for scientific web
+applications that need hyperspectral viewing without adopting a heavyweight
+backend stack.
 
-This positioning also distinguishes CubeScope from adjacent web-facing
-hyperspectral systems such as HSIToolbox, which targets the higher-level
-problem of server-side hyperspectral classification workflows with dataset
-management, labeling, remote training, and multi-user queueing
-\cite{dhaene2023}. CubeScope is aimed at a different layer: a browser-native,
-local-first viewer kernel that can be embedded into downstream applications,
-including future systems that may add classification or analysis services above
-it.
+This positioning distinguishes CubeScope from web-facing systems such as
+HSIToolbox, which targets server-side hyperspectral classification workflows
+with dataset management, labeling, remote training, and multi-user queueing
+\cite{dhaene2023}. CubeScope instead provides a browser-native, local-first
+viewer kernel that can sit below future classification or analysis services.
 
 \section{Software description}
 
@@ -313,12 +309,11 @@ analysis environment simply to inspect ENVI data in a browser. This makes the
 software relevant for exploratory work, review interfaces, annotation tools,
 quality-control utilities, and educational applications.
 
-The project also has reuse value beyond the repository demo. Because CubeScope
-is packaged as a viewer kernel with explicit runtime assets and an embeddable
-public API, it can serve as infrastructure for downstream scientific web
-applications. The current release also establishes a stable architectural base
-for later work on multispectral support, richer spatial overlays, additional
-source formats, and lightweight analysis plugins.
+Because CubeScope is packaged as a viewer kernel with explicit runtime assets
+and an embeddable public API, it can serve as infrastructure for downstream
+scientific web applications. The current release also establishes a base for
+later multispectral support, richer spatial overlays, additional source
+formats, and lightweight analysis plugins.
 
 The limitations are equally important to state clearly. The software is
 currently ENVI-first rather than broadly multi-format. The main artifact is a
@@ -384,28 +379,26 @@ hyperspectral viewer kernel. Zenodo.
 
 \section*{Funding}
 
-[To be completed. If none: This research did not receive any specific grant
-from funding agencies in the public, commercial, or not-for-profit sectors.]
+This research did not receive any specific grant from funding agencies in the
+public, commercial, or not-for-profit sectors.
 
 \section*{CRediT author statement}
 
-[To be completed using CRediT roles such as Conceptualization, Software,
-Validation, Visualization, Writing -- original draft, Writing -- review and
-editing, etc.]
+Yongyin Li: Conceptualization, Software, Validation, Visualization, Writing --
+original draft, Writing -- review and editing.
 
 \section*{Declaration of competing interest}
 
 The authors declare that they have no known competing financial interests or
 personal relationships that could have appeared to influence the work reported
-in this paper. [Revise if needed before submission.]
+in this paper.
 
 \section*{Declaration of generative AI and AI-assisted technologies in the manuscript preparation process}
 
-[Include this section only if disclosure is required under the final author
-decision. Suggested pattern: During the preparation of this work the author(s)
-used [NAME OF TOOL / SERVICE] in order to [REASON]. After using this
-tool/service, the author(s) reviewed and edited the content as needed and
-take(s) full responsibility for the content of the published article.]
+During the preparation of this work, the author used OpenAI ChatGPT/Codex to
+assist with code review, software release preparation, and manuscript editing.
+After using this tool, the author reviewed and edited the content as needed and
+takes full responsibility for the content of the published article.
 
 \section*{Acknowledgements}
 
@@ -418,8 +411,7 @@ and Remote Sensing Laboratory, University of Pavia. The Indian Pines data
 source is acknowledged through Purdue MultiSpec and the Purdue University
 Research Repository. The Kennedy Space Center scene is acknowledged as NASA
 AVIRIS data with ground-reference preparation summarized by the EHU/GIC
-resource. [Add any funding-specific, institutional, or personal
-acknowledgements before final submission.]
+resource.
 
 \begin{thebibliography}{00}
 

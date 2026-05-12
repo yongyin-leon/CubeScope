@@ -21,7 +21,9 @@ viewer core，供后续分析插件和下游应用构建。
 
 - npm 包身份：`@cubescope/web`
 - 当前发布目标：`0.1.0-alpha.1`
-- 仓库可见性：在 alpha 验收闸门全部通过前保持私有
+- 仓库可见性：公开，发布页为
+  [`v0.1.0-alpha.1`](https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1)
+- Zenodo 归档 DOI：[`10.5281/zenodo.20131367`](https://doi.org/10.5281/zenodo.20131367)
 - 包格式：仅 ESM
 - 当前浏览器目标：优先 WebGPU，同时提供 WebGL 兼容渲染路径
 - 本地 smoke / benchmark 验证链：固定使用 WebGL 兼容模式，确保私有 alpha 可复现
@@ -359,9 +361,10 @@ core that future analysis plugins and downstream applications can build on.
 
 - npm identity: `@cubescope/web`
 - release target: `0.1.0-alpha.1`
-- repository visibility: private until the author-approved public release switch
-  before SoftwareX submission; the local alpha acceptance gate passed on
-  `2026-05-12`
+- repository visibility: public, with release
+  [`v0.1.0-alpha.1`](https://github.com/yongyin-leon/CubeScope/releases/tag/v0.1.0-alpha.1)
+- archived release DOI:
+  [`10.5281/zenodo.20131367`](https://doi.org/10.5281/zenodo.20131367)
 - package format: ESM-only
 - current browser target: prefer WebGPU, with a WebGL compatibility renderer available
 - `rendererPreference: 'auto'` now degrades to WebGL for the rest of the viewer
@@ -637,8 +640,12 @@ npm run verify:alpha
 
 ## Citation
 
-If CubeScope contributes to your work, cite the software release once the alpha
-tag is published. The citation metadata lives in [`CITATION.cff`](CITATION.cff).
+If CubeScope contributes to your work, cite the archived software release:
+
+Li, Y. (2026). *CubeScope: browser-native ENVI hyperspectral viewer kernel*.
+Zenodo. https://doi.org/10.5281/zenodo.20131367
+
+The citation metadata lives in [`CITATION.cff`](CITATION.cff).
 
 ## License
 

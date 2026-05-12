@@ -8,6 +8,8 @@ Status snapshot:
 - shipped remote-sample validation now includes both the deterministic local
   fixture and a public external ENVI sample report under `output/samples/`
 - local `Node 22` verification now passes through `npm run verify:node22-local`
+- GitHub repository and `v0.1.0-alpha.1` release are public
+- Zenodo archive DOI: `10.5281/zenodo.20131367`
 - GitHub Actions confirmation on Node 22 is intentionally deferred for now and
   is not part of the current execution window
 
@@ -31,8 +33,7 @@ Status snapshot:
 - [x] registered remote-sample catalog is locally validated
 - [ ] GitHub Actions CI is green on Node 22 when the project is ready for that external gate
 - [x] `npm run verify:node22-local` passes when a local Node 22 runtime is available
-- [x] repository remains private only until the author-approved public release
-  switch before SoftwareX submission
+- [x] repository is public and release `v0.1.0-alpha.1` is archived on Zenodo
 
 ## Deferred External Gate
 

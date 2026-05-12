@@ -28,6 +28,15 @@ Notes:
 - The current SoftwareX web guide states a `3000` word limit, while the
   downloaded LaTeX template still contains an internal `4000` word note. Follow
   the stricter current web-guide limit unless the journal confirms otherwise.
-- The draft still contains author-controlled placeholders for author metadata,
-  support email, release/tag, DOI, funding, CRediT roles, AI disclosure, and
-  final data-permission wording.
+- To assemble upload-ready local artifacts, run:
+
+  ```sh
+  npm run package:softwarex-submission
+  ```
+
+  This writes the manuscript PDF, LaTeX source zip, highlights, cover letter
+  draft, and a local upload manifest under `output/softwarex-submission/`.
+- The draft still contains author-controlled contact placeholders for
+  corresponding-author email/phone and support email. The release tag, public
+  repository URL, Zenodo DOI, funding statement, CRediT statement, and AI
+  disclosure have been filled.
