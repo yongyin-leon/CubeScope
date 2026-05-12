@@ -61,8 +61,8 @@ Sincerely,
 
 `107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China`
 
-`[Email]`
+`yongyinli@126.com`
 
 `107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China`
 
-`[Phone number]`
+`+86 18883420592`

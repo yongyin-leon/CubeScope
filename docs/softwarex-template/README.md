@@ -36,7 +36,7 @@ Notes:
 
   This writes the manuscript PDF, LaTeX source zip, highlights, cover letter
   draft, and a local upload manifest under `output/softwarex-submission/`.
-- The draft still contains author-controlled contact placeholders for
-  corresponding-author email/phone and support email. The release tag, public
-  repository URL, Zenodo DOI, funding statement, CRediT statement, and AI
-  disclosure have been filled.
+- The draft includes corresponding-author email/phone, support email, release
+  tag, public repository URL, Zenodo DOI, funding statement, CRediT statement,
+  and AI disclosure. The real-dataset montage is intentionally excluded from
+  the LaTeX source package for first submission.

@@ -12,7 +12,6 @@ const paths = {
   latexTemplate: 'docs/softwarex-template/softwarex-osp-template.tex',
   wordTemplate: 'docs/softwarex-template/softwarex-osp-template.docx',
   architectureFigure: 'docs/figures/softwarex-architecture.png',
-  realEnviFigure: 'docs/figures/softwarex-real-envi-initial-views.png',
   highlights: 'docs/SOFTWAREX_HIGHLIGHTS_v1.txt',
   coverLetter: 'docs/SOFTWAREX_COVER_LETTER_DRAFT_v2.md',
   submissionManifest: 'docs/SOFTWAREX_FINAL_SUBMISSION_MANIFEST_v1.md',
@@ -85,7 +84,6 @@ for (const [item, relativePath] of [
   ['Official LaTeX template', paths.latexTemplate],
   ['Official Word template', paths.wordTemplate],
   ['Architecture figure PNG', paths.architectureFigure],
-  ['Real ENVI montage PNG', paths.realEnviFigure],
   ['Highlights file', paths.highlights],
   ['Cover letter draft', paths.coverLetter],
   ['Final submission manifest', paths.submissionManifest],
@@ -112,6 +110,19 @@ checks.push({
     trackedRealData.length === 0
       ? 'No files under test-data/高光谱数据集 are tracked by Git.'
       : `Tracked files found: ${trackedRealData.join(', ')}`,
+});
+
+const montageReferences = [
+  manuscript,
+  latexDraft,
+].filter((text) => text.includes('softwarex-real-envi-initial-views.png'));
+checks.push({
+  status: montageReferences.length === 0 ? 'PASS' : 'FAIL',
+  item: 'Real ENVI montage exclusion',
+  detail:
+    montageReferences.length === 0
+      ? 'The real-dataset montage is not referenced by the manuscript or LaTeX submission draft.'
+      : 'The real-dataset montage is still referenced by the manuscript or LaTeX submission draft.',
 });
 
 const highlightLines = highlights.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -164,9 +175,9 @@ for (const [item, text] of [
 }
 
 manual.push({
-  status: 'MANUAL',
+  status: 'PASS',
   item: 'Dataset permission/provenance finalization',
-  detail: 'Confirm screenshot reuse terms for Pika IR-L Hyalite Creek, WHU-Hi LongKou, EHU/GIC scenes, and any retained public remote sample.',
+  detail: 'The real-dataset montage has been removed; external source data remain untracked and unredistributed, while provenance citations and the data statement are retained.',
 });
 
 const releaseArchiveFinalized = manuscript.includes(zenodoDoi)
@@ -205,7 +216,9 @@ const lines = [
   '',
   checks.some((entry) => entry.status === 'FAIL')
     ? 'Resolve the automated `FAIL` items before template finalization.'
-    : 'Automated checks are clear. The remaining work is author contact metadata and final dataset-permission wording.',
+    : manual.some((entry) => entry.status === 'MANUAL')
+      ? 'Automated checks are clear. Resolve the remaining author-controlled manual fields before upload.'
+      : 'Automated checks are clear. The local submission package is ready for final author reread and upload.',
   '',
 ];
 

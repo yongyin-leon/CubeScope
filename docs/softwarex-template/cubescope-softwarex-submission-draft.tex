@@ -22,7 +22,8 @@
 \title{CubeScope: a browser-native, local-first viewer kernel for ENVI hyperspectral datasets}
 
 \author{Yongyin Li}
-\address{107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China}
+\ead{yongyinli@126.com}
+\address{107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China. Tel.: +86 18883420592}
 
 \begin{abstract}
 CubeScope is a browser-native viewer kernel for ENVI hyperspectral datasets.
@@ -77,7 +78,7 @@ C6 & Compilation requirements, operating environments \& dependencies & Node 22.
 \hline
 C7 & If available Link to developer documentation/manual & Repository README plus docs/API.md, docs/ARCHITECTURE.md, docs/REPRODUCIBILITY.md \\
 \hline
-C8 & Support email for questions & [To be completed] \\
+C8 & Support email for questions & yongyinli@126.com \\
 \hline
 \end{tabular}
 }
@@ -219,9 +220,9 @@ For manuscript preparation, the example application was also exercised with six
 local real ENVI datasets, including agricultural, urban, wetland, airborne
 near-infrared, and UAV hyperspectral scenes. These cases are used as
 illustrative validation examples rather than redistributed test assets. The
-resulting screenshots show that the first rendered view is non-blank and
-visually interpretable across BIP and BSQ layouts, floating-point and unsigned
-integer data, and both metadata-poor and wavelength-described headers.
+resulting browser-load checks show that the first rendered view is non-blank
+and visually interpretable across BIP and BSQ layouts, floating-point and
+unsigned integer data, and both metadata-poor and wavelength-described headers.
 Candidate provenance sources for these local validation cases include the
 Indian Pines/Purdue MultiSpec source \cite{purdueindian}, the EHU/GIC Pavia and
 KSC benchmark collection \cite{ehugic}, Resonon Pika IR-L documentation for the
@@ -286,15 +287,6 @@ software package.}
 \label{tab:real-envi}
 \end{table}
 
-\begin{figure}[!ht]
-\centering
-\includegraphics[width=\linewidth]{../figures/softwarex-real-envi-initial-views.png}
-\caption{Real ENVI initial views rendered by CubeScope for the six local
-validation cases. The panels are generated from browser screenshots of the
-example application. Source datasets are used only for manuscript-side
-validation and are not redistributed with the software package.}
-\end{figure}
-
 These results should be interpreted as practical evidence that the alpha
 runtime can open and render varied real ENVI cubes in a browser workflow, not
 as a hardware-independent performance claim. Several legacy benchmark datasets
@@ -322,10 +314,9 @@ an integration layer. The remote workflow depends on compatible CORS and HTTP
 range behavior at the serving endpoint. The benchmark scope is intentionally
 narrow and should not be mistaken for a full comparative systems study. The
 real-data validation cases were loaded from local files and are not
-redistributed with the repository, so their screenshot and timing evidence
-should be treated as manuscript-side validation rather than as a complete
-public benchmark suite. The current alpha is also not yet a complete scientific
-analysis environment.
+redistributed with the repository, so their timing evidence should be treated
+as manuscript-side validation rather than as a complete public benchmark suite.
+The current alpha is also not yet a complete scientific analysis environment.
 
 \section{Conclusions}
 
@@ -352,9 +343,9 @@ No new experimental datasets were generated for this software paper. The
 repository includes deterministic validation fixtures, benchmark outputs,
 browser-matrix reports, sample-validation reports, and packaging-verification
 artifacts as part of the software release and reproducibility workflow. Local
-real ENVI datasets were used to prepare illustrative screenshots and timing
-summaries for the manuscript. The Pavia Centre, Pavia University, and Kennedy
-Space Center validation cases were accessed as public benchmark scenes through
+real ENVI datasets were used to prepare timing summaries for the manuscript.
+The Pavia Centre, Pavia University, and Kennedy Space Center validation cases
+were accessed as public benchmark scenes through
 the UPV/EHU GIC Hyperspectral Remote Sensing Scenes resource \cite{ehugic}.
 Indian Pines is cited through the Purdue MultiSpec/PURR source
 \cite{purdueindian}; the local files also match the EHU/GIC index entries, but
@@ -483,7 +474,7 @@ S5 & Installation requirements \& dependencies & Node 22.x, npm 10 or later for 
 \hline
 S6 & If available, link to user manual & README and docs/API.md \\
 \hline
-S7 & Support email for questions & [To be completed] \\
+S7 & Support email for questions & yongyinli@126.com \\
 \hline
 \end{tabular}
 }

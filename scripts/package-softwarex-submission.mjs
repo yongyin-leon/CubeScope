@@ -43,7 +43,6 @@ await writeFile(files.tex, tex.replaceAll('../figures/', 'figures/'));
 
 for (const figureName of [
   'softwarex-architecture.png',
-  'softwarex-real-envi-initial-views.png',
 ]) {
   await copyFile(
     path.join(repoRoot, 'docs', 'figures', figureName),
@@ -79,7 +78,7 @@ await writeFile(
     '- Highlights: upload the highlights file if highlights are included.',
     '- Cover letter/comments: paste or upload the cover letter text if requested.',
     '',
-    'Before final upload, replace any author-controlled contact placeholders in the manuscript and cover letter.',
+    'Before final upload, reread the generated PDF and ensure the submission-system author fields match the manuscript.',
     '',
   ].join('\n'),
 );

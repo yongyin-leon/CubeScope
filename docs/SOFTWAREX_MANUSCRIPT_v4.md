@@ -16,11 +16,11 @@ ORCID identifiers: `Not provided`
 
 Corresponding author: `Yongyin Li`
 
-Corresponding author email: `[To be completed]`
+Corresponding author email: `yongyinli@126.com`
 
 Corresponding author full postal address: `107 Geological Team, Chongqing Bureau of Geology and Mineral Development, Chongqing 401120, People's Republic of China`
 
-Corresponding author phone number: `[To be completed]`
+Corresponding author phone number: `+86 18883420592`
 
 Present/permanent address notes: `None`
 
@@ -204,9 +204,9 @@ For manuscript preparation, the example application was also exercised with
 six local real ENVI datasets, including agricultural, urban, wetland, airborne
 near-infrared, and UAV hyperspectral scenes. These cases are used as
 illustrative validation examples rather than redistributed test assets. The
-resulting screenshots show that the first rendered view is non-blank and
-visually interpretable across BIP and BSQ layouts, floating-point and unsigned
-integer data, and both metadata-poor and wavelength-described headers.
+resulting browser-load checks show that the first rendered view is non-blank
+and visually interpretable across BIP and BSQ layouts, floating-point and
+unsigned integer data, and both metadata-poor and wavelength-described headers.
 Candidate provenance sources for these local validation cases include the
 Indian Pines/Purdue MultiSpec source [6], the EHU/GIC Pavia and KSC benchmark
 collection [7], Resonon Pika IR-L documentation for the near-infrared sensor
@@ -255,13 +255,6 @@ software package.
 | Pika IR-L Hyalite Creek | `555 x 1500 x 240` | `bip` | `u16` | `381.1 MB` | yes | `180/121/61` | `5/5` | `458.5 (5.4)` |
 | WHU-Hi LongKou | `400 x 550 x 270` | `bsq` | `f32` | `226.6 MB` | no | `113/68/32` | `5/5` | `27.8 (21.0)` |
 
-![Real ENVI initial views rendered by CubeScope.](figures/softwarex-real-envi-initial-views.png)
-
-Figure 2. Real ENVI initial views rendered by CubeScope for the six local
-validation cases. The panels are generated from browser screenshots of the
-example application. Source datasets are used only for manuscript-side
-validation and are not redistributed with the software package.
-
 These results should be interpreted as practical evidence that the alpha
 runtime can open and render varied real ENVI cubes in a browser workflow, not
 as a hardware-independent performance claim. Several legacy benchmark datasets
@@ -291,10 +284,10 @@ an integration layer. The remote workflow depends on compatible `CORS` and
 `HTTP range` behavior at the serving endpoint. The benchmark scope is
 intentionally narrow and should not be mistaken for a full comparative systems
 study. The real-data validation cases were loaded from local files and are not
-redistributed with the repository, so their screenshot and timing evidence
-should be treated as manuscript-side validation rather than as a complete
-public benchmark suite. The current alpha is also not yet a complete
-scientific analysis environment.
+redistributed with the repository, so their timing evidence should be treated
+as manuscript-side validation rather than as a complete public benchmark
+suite. The current alpha is also not yet a complete scientific analysis
+environment.
 
 ## 6. Conclusions
 
@@ -321,9 +314,9 @@ No new experimental datasets were generated for this software paper. The
 repository includes deterministic validation fixtures, benchmark outputs,
 browser-matrix reports, sample-validation reports, and packaging-verification
 artifacts as part of the software release and reproducibility workflow. Local
-real ENVI datasets were used to prepare illustrative screenshots and timing
-summaries for the manuscript. The Pavia Centre, Pavia University, and Kennedy
-Space Center validation cases were accessed as public benchmark scenes through
+real ENVI datasets were used to prepare timing summaries for the manuscript.
+The Pavia Centre, Pavia University, and Kennedy Space Center validation cases
+were accessed as public benchmark scenes through
 the UPV/EHU GIC Hyperspectral Remote Sensing Scenes resource [7]. Indian Pines
 is cited through the Purdue MultiSpec/PURR source [6]; the local files also
 match the EHU/GIC index entries, but Purdue/PURR is treated as the primary

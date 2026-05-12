@@ -29,11 +29,11 @@ Official guide checked on `2026-04-23` and rechecked on `2026-05-12`:
 - [x] Full affiliation addresses prepared
 - [x] Country names included in affiliations
 - [x] Corresponding author confirmed
-- [ ] Corresponding author email confirmed
+- [x] Corresponding author email confirmed
 - [x] Corresponding author postal address confirmed
-- [ ] Corresponding author phone number confirmed
-- [ ] ORCID identifiers collected if to be included
-- [ ] Present/permanent address notes added only if needed
+- [x] Corresponding author phone number confirmed
+- [x] ORCID identifiers collected if to be included: not provided
+- [x] Present/permanent address notes added only if needed: none
 
 ## 3. Authorship and declarations
 
@@ -55,7 +55,7 @@ Official guide checked on `2026-04-23` and rechecked on `2026-05-12`:
 - [x] Software availability section updated with repository URL
 - [x] Software availability section updated with release identifier
 - [x] Permanent identifier added if a DOI or archival record is available
-- [ ] Local real-ENVI screenshot permissions/provenance verified before using the montage figure in submission
+- [x] Local real-ENVI montage removed; screenshot reuse permission is no longer needed for the submission package
 
 ## 5. Repository readiness
 
@@ -71,26 +71,26 @@ Official guide checked on `2026-04-23` and rechecked on `2026-05-12`:
 
 - [x] Highlights retained for submission
 - [x] Highlights file copyedited one final time
-- [ ] Real-ENVI montage figure retained and embedded if dataset permissions are confirmed
+- [x] Real-ENVI montage figure removed from manuscript and LaTeX source package
 - [x] Decision made on graphical abstract: skip for first submission to avoid extra rights/formatting work
 - [x] If yes, graphical abstract image exported in a journal-acceptable format (not applicable)
 
 ## 7. Final file set
 
 - [x] Official-template manuscript
-- [ ] Completed metadata tables from the official template
-- [ ] Manuscript figure files, including `docs/figures/softwarex-real-envi-initial-views.png` if retained
+- [x] Completed metadata tables from the official template
+- [x] Manuscript figure files included: `docs/figures/softwarex-architecture.png`
 - [x] Highlights file, if included
 - [x] Graphical abstract, if included (not included)
-- [ ] Cover letter
-- [ ] Final repository URL
-- [ ] Final release/tag identifier
+- [x] Cover letter
+- [x] Final repository URL
+- [x] Final release/tag identifier
 
 ## 8. Submission-system sanity check
 
 - [x] Word-count sanity check completed against the official counting rule
-- [ ] Figures embedded correctly if submitting the Word template
+- [x] Figures embedded correctly in the LaTeX submission package
 - [x] References reviewed for software/release citations
 - [x] Acknowledgements section remains directly before the reference list
-- [ ] All placeholders removed
+- [x] All targeted placeholders removed
 - [ ] Submission package reread once end-to-end before upload
