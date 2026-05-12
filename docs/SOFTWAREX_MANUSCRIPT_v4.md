@@ -348,7 +348,10 @@ License: `MIT`
 
 Primary package: `@cubescope/web`
 
-Permanent software reference: `[DOI or release landing page if available]`
+Permanent software reference: `https://doi.org/10.5281/zenodo.20131367`
+
+Archived software citation: Li, Y. (2026). CubeScope: browser-native ENVI
+hyperspectral viewer kernel. Zenodo. https://doi.org/10.5281/zenodo.20131367
 
 ## Funding
 
